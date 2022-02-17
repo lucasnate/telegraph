@@ -1,7 +1,7 @@
 import * as t from 'io-ts';
 import { PathReporter } from 'io-ts/lib/PathReporter';
 import { isLeft } from 'fp-ts/lib/Either';
-import { connectionStatusC } from '../types';
+import { connectionStatusC, savedChecksumC } from '../types';
 
 // TODO: we may want to use the "magic number" field from GGPO, which I think
 // is basically just extremely naive authentication by designating a magic
@@ -10,6 +10,27 @@ import { connectionStatusC } from '../types';
 const baseMessage = {
   sequenceNumber: t.number,
 };
+
+const dataSyncRequestMessage = t.type({
+	...baseMessage,
+	type: t.literal('dataSyncRequest'),
+	dataSyncRequest: t.type({
+		firstPartSeq: t.number,
+		partCount: t.number,
+		currentPartIndex: t.number,
+		currentPart: t.string,
+	}),
+});
+
+export type MessageDataSyncRequest = t.TypeOf<typeof dataSyncRequestMessage>;
+
+const dataSyncReplyMessage = t.type({
+	...baseMessage,
+	type: t.literal('dataSyncReply'),
+	dataSyncReply: t.type({ ackPartIndex: t.number, firstPartSeq: t.number })
+});
+
+export type MessageDataSyncReply = t.TypeOf<typeof dataSyncReplyMessage>;
 
 const syncRequestMessage = t.type({
   ...baseMessage,
@@ -87,7 +108,18 @@ const keepAliveMessage = t.type({
 
 export type MessageKeepAlive = t.TypeOf<typeof keepAliveMessage>;
 
+
+const savedChecksumsMessage = t.type({
+	...baseMessage,
+	type: t.literal('savedChecksums'),
+	savedChecksums: t.array(savedChecksumC)
+});
+
+export type MessageSavedChecksums = t.TypeOf<typeof savedChecksumsMessage>;
+
 const telegraphMessage = t.union([
+  dataSyncRequestMessage,
+  dataSyncReplyMessage,
   syncRequestMessage,
   syncReplyMessage,
   qualityReportMessage,
@@ -95,6 +127,7 @@ const telegraphMessage = t.union([
   inputMessage,
   inputAckMessage,
   keepAliveMessage,
+  savedChecksumsMessage,
 ]);
 export type TelegraphMessage = t.TypeOf<typeof telegraphMessage>;
 

@@ -1,3 +1,5 @@
+// TODO: Change syncData to have an interface of being an `any`
+
 import { NetworkEventInput } from '../network/networkEvents';
 import { Sync } from '../Sync';
 import { PeerJSSocket } from '../network/PeerJSSocket';
@@ -14,6 +16,7 @@ import {
   TelegraphCallbacks,
   PlayerType,
   InputValues,
+  SyncData
 } from '../types';
 import {
   ValueResult,
@@ -21,6 +24,7 @@ import {
   ResultOk,
   ResultInvalidPlayerHandle,
   ResultPlayerAlreadyDisconnected,
+  ResultNotSynchronized,	
   SyncInputResult,
   AddPlayerResult,
   AddLocalInputResult,
@@ -28,6 +32,7 @@ import {
 import {
   TelegraphEventDisconnected,
   TelegraphEventConnected,
+  TelegraphEventDataSynchronized,
   TelegraphEventSynchronizing,
   TelegraphEventSynchronized,
   TelegraphEventConnectionInterrupted,
@@ -35,38 +40,64 @@ import {
   TelegraphEventRunning,
 } from '../events';
 
-export class P2PBackend {
+const RECOMMENDATION_INTERVAL = 240;
+
+const DEFAULT_ROLLBACK = 8;
+const DEFAULT_DELAY = 0;
+const DEFAULT_SYNC_DATA = {rank: 0, delay: DEFAULT_DELAY, rollback: DEFAULT_ROLLBACK};
+
+export class P2PBackend<T> {
   /** Shared state between this and the sync and connection classes! */
-  private localConnectionStatus: ConnectionStatus[];
-  private sync: Sync<unknown>;
+  private localConnectionStatus: ConnectionStatus[] = []; // Gets real value later in `restart()`
+  private sync: Sync<T>;
 
   private numPlayers: number;
-  private callbacks: TelegraphCallbacks<unknown>;
+  private callbacks: TelegraphCallbacks<T>;
   private socket: PeerJSSocket;
   private endpoints: PeerJSEndpoint[] = [];
   private disconnectTimeout: number;
   private disconnectNotifyStart: number;
-
+  private localSyncData: SyncData;
+  private winningSyncData: SyncData = DEFAULT_SYNC_DATA;
+  private localPlayerQueues: number[] = []
+	
+  // TODO: It is possible that this belongs in Sync more than it does here. If
+  //       we will have in the future some support for rewind-after-desync,
+  //       it will have to move to Sync.	
+  private initialState: T;
+	
   /**
    * When true, rejects any input because we're waiting for sync to be reached.
    */
   private synchronizing = true;
+  private nextRecommendedSleep = 0;
 
-  constructor(config: TelegraphConfig<unknown>) {
+	restart() {
+		this.callbacks.onLoadState(this.initialState);
+		this.localConnectionStatus = new Array(this.numPlayers)
+			.fill(null)
+			.map(() => ({
+				lastFrame: -1,
+				disconnected: false,
+			}));
+		this.sync = new Sync(this.numPlayers, this.callbacks, this.localConnectionStatus);
+		this.synchronizing = true;
+		this.nextRecommendedSleep = 0;
+		this.forEachEndpoint((endpoint, idx) => { if (!endpoint) return; endpoint.restart(); endpoint.synchronize(); });
+		return this.sync; // Returns this so it can be "assigned in constructor" to make ts happy
+	}
+	
+  constructor(config: TelegraphConfig<T>) {
     this.numPlayers = config.numPlayers;
-    this.localConnectionStatus = new Array(this.numPlayers)
-      .fill(null)
-      .map(() => ({
-        lastFrame: -1,
-        disconnected: false,
-      }));
-    this.sync = new Sync(config, this.localConnectionStatus);
     this.callbacks = config.callbacks;
+    this.initialState = this.callbacks.onSaveState();
     this.disconnectTimeout = config.disconnectTimeout;
     this.disconnectNotifyStart = config.disconnectNotifyStart;
+    this.localSyncData = config.syncData;  
     this.socket = new PeerJSSocket(config.peer, {
       onMessage: this.onMessage.bind(this),
     });
+    this.sync = this.restart(); 
   }
 
   private getEndpoint(queueIdx: number): PeerJSEndpoint | null {
@@ -85,17 +116,22 @@ export class P2PBackend {
   }
 
   addPlayer(player: Player): AddPlayerResult {
+	console.log("DEBUG: Inside addPlayer of " + player);
     const queueIdx = player.playerNumber - 1;
 
     if (player.playerNumber < 1 || player.playerNumber > this.numPlayers) {
+      console.log("DEBUG: addPlayer - " + player.playerNumber + " is out of range!");
       return { value: null, code: 'playerOutOfRange' };
     }
 
     const handle = this.queueIdxToPlayerHandle(queueIdx);
 
     if (player.type === PlayerType.remote) {
+      console.log("DEBUG: Will call addRemotePlayer!");
       this.addRemotePlayer(player.remote!.peerId, queueIdx);
-    }
+    } else {
+		this.localPlayerQueues.push(queueIdx);
+	}
 
     return { value: handle, code: 'ok' };
   }
@@ -107,8 +143,10 @@ export class P2PBackend {
       peerId,
       localConnectionStatus: this.localConnectionStatus,
       disconnectTimeout: this.disconnectTimeout,
-      disconnectNotifyStart: this.disconnectNotifyStart,
+   	  disconnectNotifyStart: this.disconnectNotifyStart,
+      localSyncData: this.localSyncData,
     });
+    console.log("DEBUG: Did addRemotePlayer for entry " + queueIdx);
     this.localConnectionStatus[queueIdx] = {
       disconnected: false,
       lastFrame: -1,
@@ -211,24 +249,28 @@ export class P2PBackend {
       );
 
       log(`Setting last confirmed frame to ${totalMinConfirmed}`);
+      let newSavedChecksums = this.sync.saveChecksumSavedFrames(totalMinConfirmed);
+      if (newSavedChecksums.length > 0)
+          this.forEachEndpoint((endpoint) => {
+			  endpoint.sendChecksums(newSavedChecksums);
+		  });
       this.sync.setLastConfirmedFrame(totalMinConfirmed);
     }
 
-    // TODO: implement timesync
-
-    // if (currentFrame > this.nextRecommendedSleep) {
-    //   let interval = 0;
-    //   for (let i = 0; i < this.numPlayers; i += 1) {
-    //     interval = Math.max(interval, this.endpoints[i].recommendFrameDelay());
-    //   }
-    //   if (interval > 0) {
-    //     this.callbacks.onEvent({
-    //       type: 'timesync',
-    //       framesAhead: interval,
-    //     });
-    //     this.nextRecommendedSleep = currentFrame + RECOMMENDATION_INTERVAL;
-    //   }
-    // }
+    if (currentFrame > this.nextRecommendedSleep) {
+       let interval = 0;
+       for (let i = 0; i < this.numPlayers; i += 1) {
+         if (this.endpoints[i] != null) 
+           interval = Math.max(interval, this.endpoints[i].recommendFrameDelay());
+       }
+       if (interval > 0) {
+         this.callbacks.onEvent({
+			 type: 'timesync',
+			 timesync: { framesAhead: interval }
+         });
+         this.nextRecommendedSleep = currentFrame + RECOMMENDATION_INTERVAL;
+       }
+    }
   }
 
   /**
@@ -300,7 +342,39 @@ export class P2PBackend {
             },
           };
           this.callbacks.onEvent(outgoing);
-        } else if (evt.type === 'synchronizing') {
+        } else if (evt.type === 'dataSynchronized') {
+			const isSyncData = (syncData: any): syncData is SyncData => {
+				return typeof(syncData.rank) == 'number' && Number.isSafeInteger(syncData.rank) &&
+					typeof(syncData.delay) == 'number' && Number.isSafeInteger(syncData.delay) &&
+					typeof(syncData.rollback) == 'number' && Number.isSafeInteger(syncData.rollback);
+			}; 
+			let strongestNetParamsRank = isSyncData(this.localSyncData) ? this.localSyncData.rank : 0;
+			let strongestNetParamsPeerId = this.socket.getPeerId();
+			this.winningSyncData = isSyncData(this.localSyncData) ? this.localSyncData : DEFAULT_SYNC_DATA;
+			console.log(this.localSyncData);
+			console.log("Local rank is " + strongestNetParamsRank + ", local guid is " + strongestNetParamsPeerId + " delay is " + this.winningSyncData.delay + " rollback is " + this.winningSyncData.rollback);
+			this.forEachEndpoint((endpoint2, ignored) => {
+				const maybeRemoteSyncData = endpoint2.getSyncData();
+				if (maybeRemoteSyncData.code !== 'ok')
+					return;
+				const remoteSyncData = maybeRemoteSyncData.value;
+				console.log(remoteSyncData);
+				if (isSyncData(remoteSyncData) && (remoteSyncData.rank > strongestNetParamsRank || remoteSyncData.rank == strongestNetParamsRank && endpoint2.getPeerId() > strongestNetParamsPeerId)) {
+					strongestNetParamsRank = remoteSyncData.rank;
+					strongestNetParamsPeerId = endpoint2.getPeerId();
+					console.log("Assigning " + JSON.stringify(remoteSyncData) + " into " + JSON.stringify(this.winningSyncData));
+					this.winningSyncData = remoteSyncData;
+				}
+			});
+			console.log("Winning rank is " + strongestNetParamsRank + ", winning guid is " + strongestNetParamsPeerId + " delay is " + this.winningSyncData.delay + " rollback is " + this.winningSyncData.rollback);
+			for (const i of this.localPlayerQueues) {
+				if (this.endpoints[i] == null)
+					this.sync.setFrameDelay(i, this.winningSyncData.delay);
+			}
+			this.sync.setFrameRollback(this.winningSyncData.rollback);
+			const outgoing: TelegraphEventDataSynchronized = { type: 'dataSynchronized' };
+			this.callbacks.onEvent(outgoing);
+		} else if (evt.type === 'synchronizing') {
           const outgoing: TelegraphEventSynchronizing = {
             type: 'synchronizing',
             synchronizing: {
@@ -439,6 +513,28 @@ export class P2PBackend {
     this.checkInitialSync();
   }
 
+	getSyncData(handle: PlayerHandle): ValueResult<any, ResultOk | ResultInvalidPlayerHandle | ResultNotSynchronized> {
+		const result = this.playerHandleToQueueIdx(handle);
+		if (result.code !== 'ok') {
+			return { code: result.code, value: null };
+		}
+		let endpoint = this.getEndpoint(result.value!);
+		if (endpoint == null)
+			return {code: 'ok', value: this.localSyncData};
+		else
+			return endpoint.getSyncData();
+	}
+
+	getWinningSyncData(): SyncData {
+		return this.winningSyncData;
+	}
+	
+	setLocalSyncData(localSyncData: SyncData) {
+		console.log("setLocalSyncData(" + JSON.stringify(localSyncData) + ")");
+		this.localSyncData = localSyncData;
+		this.forEachEndpoint((endpoint, idx) => { endpoint.setLocalSyncData(localSyncData); });
+	}
+	
   getNetworkStats(
     handle: PlayerHandle
   ): ValueResult<TelegraphNetworkStats, ResultOk | ResultInvalidPlayerHandle> {
@@ -449,7 +545,11 @@ export class P2PBackend {
     const stats = this.getEndpoint(result.value!)?.getNetworkStats() ?? {
       // placeholder in case you get local player for some reason
       ping: -1,
-      sendQueueLength: -1,
+	  sendQueueLength: -1,
+      localFrameAdvantage: -1,
+      remoteFrameAdvantage: -1,
+      remainingDataSyncSteps: 0,
+      remainingTimeSyncSteps: 0
     };
     return { code: 'ok', value: stats };
   }
@@ -461,8 +561,15 @@ export class P2PBackend {
     if (!endpoint) {
       throw new Error(`no endpoint found for peer ID ${fromId}`);
     }
-    endpoint.onMessage(message);
-    this.postProcessUpdate();
+    let postRestartMsg = endpoint.onMessage(message);
+    let needRestart = postRestartMsg != null;
+    if (needRestart) {
+	  this.restart();
+      this.callbacks.onEvent({type: 'restart'});
+      endpoint.onMessage(message);
+	}
+    else
+      this.postProcessUpdate();
   }
 
   private queueIdxToPlayerHandle(queue: number): number {
@@ -516,4 +623,18 @@ export class P2PBackend {
 
     return { code: 'ok' };
   }
+
+	getFrameDelay(handle: PlayerHandle): ValueResult<number, ResultOk | ResultInvalidPlayerHandle> {
+		const result = this.playerHandleToQueueIdx(handle);
+		if (result.code !== 'ok') {
+			return { code: result.code, value: null };
+		}
+		
+		return { code: 'ok', value: this.sync.getFrameDelay(result.value!) };
+	}
+
+	getFrameRollback(): number {
+		return this.sync.getFrameRollback();
+	}
+
 }

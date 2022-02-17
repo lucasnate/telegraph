@@ -40,3 +40,4 @@ export type SyncInputResult = ValueResult<
   SyncInputResultValue,
   ResultOk | ResultNotSynchronized
 >;
+

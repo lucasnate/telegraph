@@ -7,10 +7,9 @@ import {
   onConnectButtonClick,
 } from './renderPage';
 
-const peer = new Peer({
-  host: process.env.PEERJS_HOST,
-  port: parseInt(process.env.PEERJS_PORT!, 10),
-});
+const peer = new Peer();
+
+console.log("DEBUG: " + process.env.PEERJS_HOST);
 
 let playerNum = 1;
 let hasConnection = false;

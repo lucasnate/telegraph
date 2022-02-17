@@ -11,6 +11,7 @@ export interface GameInput {
 }
 
 const INPUT_QUEUE_LENGTH = 128;
+const CHECKSUM_FRAME_INTERVAL = 60;
 
 const previousFrame = (offset: number): number =>
   offset === 0 ? INPUT_QUEUE_LENGTH - 1 : offset - 1;
@@ -47,7 +48,7 @@ export class InputQueue {
   private lastAddedFrame = -1;
   private isFirstFrame = true;
 
-  private frameDelay = 0;
+  public frameDelay = 0;
 
   // TODO: there's probably a more ideomatic way to do this...
   private inputs: GameInput[] = new Array(INPUT_QUEUE_LENGTH)
@@ -66,6 +67,21 @@ export class InputQueue {
     return this.firstIncorrectFrame;
   }
 
+	tryGetCheckSumFrames(lastFetchedChecksumFrame: number, minConfirmedFrame: number): number[] {
+		if (this.length === 0) return [];
+
+		let lastChecksumFrame = Math.floor(minConfirmedFrame / CHECKSUM_FRAME_INTERVAL) * CHECKSUM_FRAME_INTERVAL;
+		if (lastChecksumFrame < lastFetchedChecksumFrame) return [];
+			
+		let tailFrame = this.inputs[this.tail].frame;
+		let firstChecksumFrame = Math.max(Math.ceil(tailFrame / CHECKSUM_FRAME_INTERVAL) * CHECKSUM_FRAME_INTERVAL,
+										  lastFetchedChecksumFrame + CHECKSUM_FRAME_INTERVAL);
+		let ret : number[] = [];
+		for (; firstChecksumFrame <= lastChecksumFrame; firstChecksumFrame += CHECKSUM_FRAME_INTERVAL)
+			ret.push(firstChecksumFrame);
+		return ret;
+	}
+	
   /**
    * Remove confirmed inputs once we have processed them. We "remove" inputs by
    * just moving the tail forward, so I guess they just get overridden later.
@@ -322,9 +338,5 @@ export class InputQueue {
       this.length <= INPUT_QUEUE_LENGTH,
       'InputQueue overflowed max queue length!'
     );
-  }
-
-  setFrameDelay(delay: number): void {
-    this.frameDelay = delay;
   }
 }

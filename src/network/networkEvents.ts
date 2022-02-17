@@ -26,6 +26,10 @@ export interface NetworkEventConnected {
   type: 'connected';
 }
 
+export interface NetworkEventDataSynchronized {
+  type: 'dataSynchronized';
+}
+
 export interface NetworkEventSynchronizing {
   type: 'synchronizing';
   synchronizing: {
@@ -40,6 +44,7 @@ export interface NetworkEventSynchronized {
 
 export type NetworkEvent =
   | NetworkEventConnected
+  | NetworkEventDataSynchronized
   | NetworkEventSynchronizing
   | NetworkEventSynchronized
   | NetworkEventInput

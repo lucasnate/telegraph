@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 
-import { TelegraphConfig, PlayerHandle, Player, InputValues } from './types';
+import { TelegraphConfig, PlayerHandle, Player, InputValues, SyncData } from './types';
 import { Backend } from './backend/Backend';
 import { P2PBackend } from './backend/P2PBackend';
 
@@ -27,6 +27,18 @@ export class Telegraph<T> {
     return this.session.disconnectPlayer(handle);
   }
 
+    getWinningSyncData() {
+		return this.session.getWinningSyncData();
+	}
+	
+	getSyncData(handle: PlayerHandle) {
+		return this.session.getSyncData(handle);
+	}
+
+	setLocalSyncData(localSyncData: SyncData) {
+		this.session.setLocalSyncData(localSyncData);
+	}
+	
   /**
    * Call in:
    * - Your fixed run loop, after updating your game state, only if
@@ -56,4 +68,16 @@ export class Telegraph<T> {
   setFrameDelay(handle: PlayerHandle, delay: number) {
     return this.session.setFrameDelay(handle, delay);
   }
+
+  getFrameDelay(handle: PlayerHandle) {
+    return this.session.getFrameDelay(handle);
+  }
+
+  getFrameRollback(): number {
+      return this.session.getFrameRollback();
+  }
+	
+	restart() {
+		this.session.restart();
+	}
 }

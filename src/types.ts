@@ -2,16 +2,20 @@ import * as t from 'io-ts';
 import Peer from 'peerjs';
 import { TelegraphEvent } from './events';
 
-export interface SaveResult<T> {
-  state: T;
-  checksum: string | null;
-}
+export const savedChecksumC = t.type({
+	frame: t.number,
+	checksum: t.string
+})
+
+
+export type SavedChecksum = t.TypeOf<typeof savedChecksumC>;
 
 export interface TelegraphCallbacks<T> {
-  onSaveState: () => SaveResult<T>;
+  onSaveState: () => T;
   onLoadState: (snapshot: T) => void;
   onAdvanceFrame: () => void;
   onEvent: (event: TelegraphEvent) => void;
+  onChecksum: (snapshot: T) => string;
 }
 
 export interface TelegraphConfig<T> {
@@ -22,6 +26,7 @@ export interface TelegraphConfig<T> {
   numPlayers: number;
   disconnectTimeout: number; // default = 5000
   disconnectNotifyStart: number; // default = 750
+  syncData: any;
 }
 
 export type InputValues = number[];
@@ -57,6 +62,20 @@ export interface RemoteDetails {
 export interface TelegraphNetworkStats {
   ping: number;
   sendQueueLength: number;
-  // localFramesBehind: number;
-  // remoteFramesBehind: number;
+  localFrameAdvantage: number;
+  remoteFrameAdvantage: number;
+  remainingDataSyncSteps: number;	
+  remainingTimeSyncSteps: number;	
+}
+
+export interface SyncData {
+	rank: number;
+	delay: number;
+	rollback: number;
+}
+
+export enum SynchronizationPhase {
+	data,
+	time,
+	done,
 }

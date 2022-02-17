@@ -13,5 +13,5 @@
     "sourceMap": true,
     "pretty": true
   },
-  "include": ["src", "test", "demo/src/index-entry.ts"]
+  "include": ["src", "test", "demo/src/index-entry.ts", "demo2"]
 }

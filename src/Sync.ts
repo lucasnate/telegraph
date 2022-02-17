@@ -9,6 +9,7 @@ import {
   TelegraphConfig,
   ConnectionStatus,
   InputValues,
+  SavedChecksum
 } from './types';
 import { SyncInputResultValue } from './resultTypes';
 import { assert } from './util/assert';
@@ -17,7 +18,6 @@ import { log } from './log';
 interface SavedFrame<T> {
   state: T;
   frame: number;
-  checksum: string | null;
 }
 
 /**
@@ -46,21 +46,20 @@ export class Sync<T> {
   // do not know how i feel about this
   private localConnectionStatus: ConnectionStatus[];
 
-  private savedStates: SavedState<T>;
+	private savedStates: SavedState<T> = {head: 0, frames: []}; // Will be initialized later in setFrameRollback
 
+  // Stuff related to checksum reporting
+  private lastFetchedChecksumFrame: number = -MAX_PREDICTION_FRAMES;
+	
   constructor(
-    config: TelegraphConfig<T>,
+    numPlayers: number,
+    callbacks: TelegraphCallbacks<T>,
     localConnectionStatus: ConnectionStatus[]
   ) {
-    this.callbacks = config.callbacks;
+    this.callbacks = callbacks;
     this.localConnectionStatus = localConnectionStatus;
-    this.savedStates = {
-      head: 0,
-      // why we add + 2 to this, I am unclear, but it's required or things
-      // break!
-      frames: new Array(this.maxPredictionFrames + 2),
-    };
-    this.createQueues(config);
+    this.createQueues(numPlayers);
+    this.setFrameRollback(MAX_PREDICTION_FRAMES);  
   }
 
   getFrameCount(): number {
@@ -71,15 +70,34 @@ export class Sync<T> {
     return this.inRollback;
   }
 
+
+	saveChecksumSavedFrames(lastConfirmedFrame: number): SavedChecksum[] {
+		// Due to delay, it is possible that lastConfirmedFrame is bigger than what we got
+		// through local inputs. That's why we add this Math.min.
+		let lastConfirmedFrameIncludingLocal = Math.min(lastConfirmedFrame, this.frameCount - 1);
+		let checksumFrames: number[] = this.inputQueues[0].tryGetCheckSumFrames(this.lastFetchedChecksumFrame,
+																				lastConfirmedFrameIncludingLocal);
+		let ret: SavedChecksum[] = [];
+		for (let frame of checksumFrames) {
+			let state = this.savedStates.frames[this.findSavedFrameIndex(frame)];
+			let toPush = {frame: state.frame, checksum: this.callbacks.onChecksum(state.state)};
+			ret.push(toPush);
+		}
+		if (checksumFrames.length > 0)
+			this.lastFetchedChecksumFrame = checksumFrames[checksumFrames.length - 1];
+		return ret;
+	}
+	
   /**
    *  Updates both the internal last confirmed frame as well as the input
-   *  queues.
+   *  queues. If any of the newly confirmed frames is a checksum frame, 
+   *  return checksum info.
    */
-  setLastConfirmedFrame(frame: number): void {
+  setLastConfirmedFrame(frame: number): void  {
     this.lastConfirmedFrame = frame;
     if (this.lastConfirmedFrame > 0) {
       for (const queue of this.inputQueues) {
-        queue.discardConfirmedFrames(frame - 1);
+          queue.discardConfirmedFrames(frame - 1);
       }
     }
   }
@@ -166,9 +184,9 @@ export class Sync<T> {
   }
 
   adjustSimulation(seekTo: number): void {
-    console.log(
-      `[Sync] Rolling back to to frame ${seekTo} from ${this.frameCount}`
-    );
+    // console.log(
+    //   `[Sync] Rolling back to to frame ${seekTo} from ${this.frameCount}`
+    // );
     const frameCount = this.frameCount;
 
     const count = frameCount - seekTo;
@@ -189,7 +207,7 @@ export class Sync<T> {
       'Sync: failed to reach previous frameCount after rollback'
     );
 
-    console.log('[Sync] Finished rollback');
+    // console.log('[Sync] Finished rollback');
 
     this.inRollback = false;
   }
@@ -225,8 +243,7 @@ export class Sync<T> {
     const saveResult = this.callbacks.onSaveState();
     this.savedStates.frames[this.savedStates.head] = {
       frame: this.frameCount,
-      state: saveResult.state,
-      checksum: saveResult.checksum,
+      state: saveResult,
     };
     this.savedStates.head =
       (this.savedStates.head + 1) % this.savedStates.frames.length;
@@ -253,8 +270,8 @@ export class Sync<T> {
     return idx;
   }
 
-  private createQueues(config: TelegraphConfig<T>): void {
-    for (let i = 0; i < config.numPlayers; i += 1) {
+  private createQueues(numPlayers: number): void {
+    for (let i = 0; i < numPlayers; i += 1) {
       this.inputQueues.push(new InputQueue());
     }
   }
@@ -286,6 +303,26 @@ export class Sync<T> {
   }
 
   setFrameDelay(queueIdx: number, delay: number): void {
-    this.inputQueues[queueIdx].setFrameDelay(delay);
+    console.log("setFrameDelay(" + queueIdx + ", " + delay);
+    this.inputQueues[queueIdx].frameDelay = delay;
   }
+
+	getFrameDelay(queueIdx: number): number {
+		return this.inputQueues[queueIdx].frameDelay;
+	}
+	
+	setFrameRollback(rollback: number): void {
+		this.maxPredictionFrames = rollback;
+		this.lastFetchedChecksumFrame = -rollback;
+		this.savedStates = {
+			head: 0,
+			// why we add + 2 to this, I am unclear, but it's required or things
+			// break!
+			frames: new Array(rollback + 2),
+		};
+	}
+
+	getFrameRollback(): number {
+		return this.maxPredictionFrames;
+	}
 }

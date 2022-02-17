@@ -3,6 +3,14 @@ import { assert } from '../util/assert';
 import { parseTelegraphMessage, TelegraphMessage } from './messages';
 import { log } from '../log';
 
+let minFakeLag: number = 0;
+let maxFakeLag: number = 0;
+let fakePacketLoss: number = 0;
+
+export function setMinFakeLag(value: number) { minFakeLag = value; }
+export function setMaxFakeLag(value: number) { maxFakeLag = value; }
+export function setFakePacketLoss(value: number) { fakePacketLoss = value; }
+
 interface SocketCallbacks {
   onMessage(fromId: string, msg: TelegraphMessage): void;
 }
@@ -57,12 +65,22 @@ export class PeerJSSocket {
     });
   };
 
+	getPeerId(): string {
+		return this.peer.id;
+	}
+	
   sendTo(peerId: string, message: TelegraphMessage): void {
     assert(
       !!this.connections[peerId],
       `Tried to send message to nonexistent connection ${peerId}`
     );
-    log('[messages] Sending', message);
-    this.connections[peerId].send(message);
+	log('[messages] Sending', message);
+    if (minFakeLag === 0 && maxFakeLag === 0 && fakePacketLoss === 0)
+	  this.connections[peerId].send(message);
+	else {
+	  let fakeLag = Math.floor(Math.random() * (maxFakeLag - minFakeLag + 1));
+      if (Math.random() * 100 >= fakePacketLoss)	
+	    setTimeout(() => { this.connections[peerId].send(message); }, fakeLag + minFakeLag); // DEBUG: This creates fake lag
+	}
   }
 }

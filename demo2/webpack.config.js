@@ -21,13 +21,16 @@ const config = (entry) => {
       devtoolModuleFilenameTemplate: '[absolute-resource-path]',
     },
     optimization: {
-      minimize: false,
+      minimize: true,
     },
     performance: {
       hints: false,
     },
     resolve: {
-      extensions: ['.ts', '.tsx', '.js', '.json'],
+		extensions: ['.ts', '.tsx', '.js', '.json'],
+		fallback: { "crypto": require.resolve("crypto-browserify"),
+					"buffer": require.resolve("buffer/"),
+					"stream": require.resolve("stream-browserify")}
     },
     ignoreWarnings: [{module: /.*peerjs.*/}],
     module: {

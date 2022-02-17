@@ -21,6 +21,10 @@ export interface TelegraphEventDisconnected {
   };
 }
 
+export interface TelegraphEventDataSynchronized {
+  type: 'dataSynchronized';
+}
+
 export interface TelegraphEventSynchronizing {
   type: 'synchronizing';
   synchronizing: {
@@ -56,11 +60,25 @@ export interface TelegraphEventConnectionResumed {
   };
 }
 
+export interface TelegraphEventTimesync {
+	type: 'timesync';
+	timesync: {
+		framesAhead: number;
+	};
+}
+
+export interface TelegraphEventRestart {
+	type: 'restart';
+}
+
 export type TelegraphEvent =
   | TelegraphEventConnected
   | TelegraphEventDisconnected
+  | TelegraphEventDataSynchronized
   | TelegraphEventSynchronizing
   | TelegraphEventSynchronized
   | TelegraphEventRunning
   | TelegraphEventConnectionInterrupted
-  | TelegraphEventConnectionResumed;
+  | TelegraphEventConnectionResumed
+  | TelegraphEventTimesync
+  | TelegraphEventRestart;
