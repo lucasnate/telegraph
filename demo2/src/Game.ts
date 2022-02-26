@@ -10,7 +10,8 @@ import {
 import { TelegraphNetworkStats, SyncData } from '../../src/types';
 import { keyCodes } from './util/keyCodes';
 import { Inputter } from './util/Inputter';
-import JSum from 'jsum';
+import { hash } from './util/hash';
+import deterministicStringify from 'fast-json-stable-stringify';
 
 const GAME_WIDTH = 640;
 const GAME_HEIGHT = 240;
@@ -228,7 +229,9 @@ class Game {
 					}
 					
 				},
-				onChecksum: (snapshot): string => { return JSum.digest(snapshot, 'MD5', 'base64'); }				
+				onChecksum: (snapshot): string => {
+					return hash(deterministicStringify(JSON.parse(snapshot)));
+				}				
 			}});
 		this.idealGameState = new GameState();
 		this.gameState = new GameState();
