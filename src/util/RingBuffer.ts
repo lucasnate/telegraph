@@ -7,17 +7,23 @@ export class RingBuffer<T> {
   private tail = 0;
   private size = 0;
   private maxSize: number;
-  private elements: T[] = new Array(64);
+  private elements: T[];
 
   constructor(maxSize: number) {
-    this.maxSize = maxSize;
+      this.maxSize = maxSize;
+	  this.elements = new Array(this.maxSize);
   }
 
   front(): T {
     assert(this.size !== this.maxSize, `Ring buffer full`);
+    assert(this.size !== 0, `Ring buffer empty`);
     return this.elements[this.tail];
   }
 
+	itemReverse(i: number): T {
+		return this.item(this.size - 1 - i);
+	}
+	
   item(i: number): T {
     assert(
       i < this.size,
@@ -28,6 +34,7 @@ export class RingBuffer<T> {
 
   pop(): void {
     assert(this.size !== this.maxSize, `Ring buffer full`);
+    assert(this.size !== 0, `Ring buffer empty`);
     this.tail = (this.tail + 1) % this.maxSize;
     this.size -= 1;
   }
@@ -49,4 +56,8 @@ export class RingBuffer<T> {
   isEmpty(): boolean {
     return this.size === 0;
   }
+
+	isFull(): boolean {
+		return this.size === this.maxSize - 1;
+	}
 }
