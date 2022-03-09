@@ -1,7 +1,9 @@
+// You must make camera movement softer, it fucking makes you sick!
+
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor } from './GameState';
 import { MAX_INT_ANGLE, max } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
+import { KIDON_TRIANGLES, KIDON_SHOT_A_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
 
 // Vertex shader program
 const VERTEX_SHADER_SOURCE = `
@@ -46,11 +48,13 @@ interface ProgramInfo {
 interface Buffers {
 	kidon: WebGLBuffer;
 	kidonVertexCount: number;
+	kidonShotA: WebGLBuffer;
+	kidonShotAVertexCount: number;
 	grid: WebGLBuffer;
 	gridVertexCount: number;
 };
 
-let debug = true;
+let debug = 200;
 
 const GRID_COUNT = 21;
 const GRID_LINES = (() => {
@@ -69,7 +73,7 @@ const GRID_LINES = (() => {
 	}
 	return grid;
 })();
-const MIN_ZOOM_DIFF = max(WORLD_WIDTH, WORLD_HEIGHT) / 4;
+const MIN_ZOOM_DIFF = max(WORLD_WIDTH, WORLD_HEIGHT);
 
 function getEntityColor(entity: Entity) {
 	switch (entity.type) {
@@ -84,10 +88,31 @@ function getEntityColor(entity: Entity) {
 						default:
 							throw new Error("Unknown color");
 					}
+				case EntityState.Recovery:
 				case EntityState.Moving:
 					return {r: 0.5, g: 0.5, b: 0.5};
+				case EntityState.Startup:
+					switch (entity.color) {
+						case EntityColor.Red:
+							return {r: 1.0, g: 0.5, b: 0.5};
+						case EntityColor.Blue:
+							return {r: 0.5, g: 0.5, b: 1.0};
+						default:
+							throw new Error("Unknown color");
+					}
 				default:
 					throw new Error("Unknown state");
+			}
+		case EntityType.ShotA:
+			switch (entity.color) {
+				case EntityColor.Neutral:
+					return {r: 1, g: 1, b: 1};
+				case EntityColor.Red:
+					return {r: 1.0, g: 0.5, b: 0.5};
+				case EntityColor.Blue:
+					return {r: 0.5, g: 0.5, b: 1.0};
+				default:
+					throw new Error("Unknown color");
 			}
 		default:
 			throw new Error("Unknown entity type");
@@ -98,6 +123,7 @@ export class Renderer {
 	readonly gl: WebGLRenderingContext;
 	readonly programInfo: ProgramInfo;
 	readonly buffers: Buffers;
+	lastDiff: number | null = null;
 	constructor() {
 		this.gl = (document.getElementById('glCanvas') as HTMLCanvasElement).getContext("webgl")!;
 		this.programInfo = this.createProgramInfo();
@@ -174,6 +200,8 @@ export class Renderer {
 		return {
 			kidon: this.createBuffer(KIDON_TRIANGLES),
 			kidonVertexCount: KIDON_TRIANGLES.length / 2,
+			kidonShotA: this.createBuffer(KIDON_SHOT_A_TRIANGLES),
+			kidonShotAVertexCount: KIDON_SHOT_A_TRIANGLES.length / 2,
 			grid: this.createBuffer(GRID_LINES),
 			gridVertexCount: GRID_LINES.length / 2
 		};
@@ -219,30 +247,80 @@ export class Renderer {
 		maxx += diffWithoutPad / 10;
 		miny -= diffWithoutPad / 10;
 		maxy += diffWithoutPad / 10;
-		let diffWithoutLimit = maxx - minx;
+		const diffWithoutLimit = maxx - minx;
 		if (diffWithoutLimit < MIN_ZOOM_DIFF) {
 			minx -= (MIN_ZOOM_DIFF - diffWithoutLimit) / 2;
 			miny -= (MIN_ZOOM_DIFF - diffWithoutLimit) / 2;
 			maxx += (MIN_ZOOM_DIFF - diffWithoutLimit) / 2;
 			maxy += (MIN_ZOOM_DIFF - diffWithoutLimit) / 2;
 		}
+
+		// let's say we have show dx_new. Let's say we have a square of size 100x100.
+		// If dx_new is 100, this square covers the entire screen.
+		// If dx_new is 200, this square covers a 1/4.
+		// If dx_new is 300, this square covers a 1/9.
+		//
+		// This can be measured by 100 / dx_new^2.
+		//
+		// 1/dx_new^2 - 1/dx_old^2 < -THRESHOLD      --> in case we are zooming out too fast.
+		//   1/dx_new^2 < -THRESHOLD + 1/dx_old^2
+		//   dx_new^2 > 1 / (-THRESHOLD + 1/dx_old^2)
+		//   dx_new = sqrt(1 / (-THRESHOLD + 1/dx_old^2))
+		// 1/dx_new^2 - 1/dx_old^2 > +THRESHOLD      --> in case we are zooming in too fast.
+		//   1/dx_new^2 > THRESHOLD + 1/dx_old^2
+		//   dx_new^2 < 1 / (THRESHOLD + 1/dx_old^2)
+		//   dx_new = sqrt(1 / (THRESHOLD + 1/dx_old^2))
+		const diffWithoutSoften = maxx - minx;
+		let newWantedDiff = 0;
+		// let SOFTEN_THRESHOLD = 0.00000000001;
+		// if (this.lastDiff == null) {
+		// 	newWantedDiff = diffWithoutSoften;
+		// } else if (1 / (diffWithoutSoften * diffWithoutSoften) - 1 / (this.lastDiff * this.lastDiff) < -SOFTEN_THRESHOLD) {
+		// 	newWantedDiff = Math.sqrt(1 / (-SOFTEN_THRESHOLD + 1 / (this.lastDiff * this.lastDiff)));
+		// } else if (1 / (diffWithoutSoften * diffWithoutSoften) - 1 / (this.lastDiff * this.lastDiff) > SOFTEN_THRESHOLD) {
+		// 	newWantedDiff = Math.sqrt(1 / (+SOFTEN_THRESHOLD + 1 / (this.lastDiff * this.lastDiff)));
+		// } else {
+		// 	newWantedDiff = diffWithoutSoften;
+		// }
+
+		// Our zoom level is 1/dx_new. We don't want to multiply our zoom level by more
+		// than SOFTEN_THRESHOLD.
+		//
+		// Thus, we say
+		//  (1/dx_new)/(1/dx_old) > SOFTEN_THRESHOLD
+		//    dx_old/dx_new < SOFTEN_THRESHOLD
+		//    dx_old / SOFTEN_THRESHOLD < dx_new
+		//    dx_old / SOFTEN_THRESHOLD = dx_new
+		//  (1/dx_old)/(1/dx_new) > SOFTEN_THRESHOLD
+		//    dx_new/dx_old < SOFTEN_THRESHOLD
+		//    dx_new < SOFTEN_THRESHOLD * dx_old
+		//    dx_new = SOFTEN_THRESHOLD * dx_old
+		let SOFTEN_THRESHOLD = 1.0067806369281345; // pow(1.5,1/60.0)
+		if (--debug > 0)
+			console.log("Last diff is " + this.lastDiff +
+				" diffWithoutSoften is " + diffWithoutSoften);
+		if (this.lastDiff == null) {
+			newWantedDiff = diffWithoutSoften;
+		} else if (this.lastDiff / diffWithoutSoften > SOFTEN_THRESHOLD) {
+			newWantedDiff = this.lastDiff / SOFTEN_THRESHOLD;
+		} else if (diffWithoutSoften / this.lastDiff > SOFTEN_THRESHOLD) {
+			newWantedDiff = this.lastDiff * SOFTEN_THRESHOLD;
+		} else {
+			newWantedDiff = diffWithoutSoften;
+		}
+		// if (--debug > 0)
+		// 	console.log("Adding to zoom " + (newWantedDiff - diffWithoutSoften) / 2);
+		minx -= (newWantedDiff - diffWithoutSoften) / 2;
+		miny -= (newWantedDiff - diffWithoutSoften) / 2;
+		maxx += (newWantedDiff - diffWithoutSoften) / 2;
+		maxy += (newWantedDiff - diffWithoutSoften) / 2;
+		this.lastDiff = maxx - minx;
+
+		
 		
 		mat4.scale(cameraMatrix, cameraMatrix, [2 / (maxx - minx), 2 / (maxy - miny), 1]);
 		mat4.translate(cameraMatrix, cameraMatrix,
 					   [-(minx + maxx) / 2, -(miny + maxy) / 2, 0]);
-		if (debug) {
-			console.log("-----DEBUG-----");
-			console.log(MIN_X);
-			console.log(WORLD_WIDTH);
-			console.log(GRID_COUNT);
-			console.log(cameraMatrix);
-			console.log(GRID_LINES);
-			console.log(minx);
-			console.log(miny);
-			console.log(maxx);
-			console.log(maxy);
-			debug = false;
-		}
 		this.gl.uniformMatrix4fv( this.programInfo.uniformLocations.cameraMatrix, false, cameraMatrix);
 	}
 
@@ -268,11 +346,23 @@ export class Renderer {
 			mat4.identity(matrix);
 			mat4.translate(matrix, matrix, pos);
 			mat4.rotate(matrix, matrix, state.entities[i].angleInt * 2 * Math.PI / MAX_INT_ANGLE, [0,0,1]);
-			this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.kidon);
+			let vertexCount = 0;
+			switch (state.entities[i].type) {
+				case EntityType.Ship: 
+					this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.kidon);
+					vertexCount = this.buffers.kidonVertexCount;
+					break;
+				case EntityType.ShotA: 
+					this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.kidonShotA);
+					vertexCount = this.buffers.kidonShotAVertexCount;
+					break;
+				default:
+					throw new Error("Unknown entity to draW");
+			}
 			this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
 			this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
 			this.gl.uniformMatrix4fv(this.programInfo.uniformLocations.modelSpecificMatrix, false, matrix);
-			this.gl.drawArrays(this.gl.TRIANGLES, 0, this.buffers.kidonVertexCount);
+			this.gl.drawArrays(this.gl.TRIANGLES, 0, vertexCount);
 		}
 	}
 	

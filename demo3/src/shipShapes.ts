@@ -49,3 +49,12 @@ export const KIDON_TRIANGLES = (() => {
 })();// [0,+safeDiv(KIDON_HEIGHT,2),-100,-safeDiv(KIDON_HEIGHT,2),+100,-safeDiv(KIDON_HEIGHT,2)];
 export const KIDON_COARSE_RECT = getCoarseSquare(KIDON_TRIANGLES);
 export const KIDON_COARSE_RADIUS = getCoarseRadius(KIDON_TRIANGLES);
+
+export const KIDON_SHOT_A_WIDTH = safeDiv(KIDON_WIDTH, 2)
+export const KIDON_SHOT_A_HEIGHT = safeDiv(KIDON_HEIGHT, 4)
+export const KIDON_SHOT_A_TRIANGLES = [
+	+safeDiv(KIDON_SHOT_A_WIDTH, 2), 0,
+    -safeDiv(KIDON_SHOT_A_WIDTH, 2), +safeDiv(KIDON_SHOT_A_HEIGHT, 2),
+	-safeDiv(KIDON_SHOT_A_WIDTH, 2), -safeDiv(KIDON_SHOT_A_HEIGHT, 2)
+];
+export const KIDON_SHOT_A_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_A_TRIANGLES);

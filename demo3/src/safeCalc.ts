@@ -2,6 +2,10 @@ import { assert } from '../../src/util/assert';
 import { hash } from './util/hash';
 import deterministicStringify from 'fast-json-stable-stringify';
 
+export function abs(x: number): number {
+	return Math.abs(x);
+}
+
 export function max(x: number, y: number): number {
 	return Math.max(x, y);
 }
@@ -16,6 +20,24 @@ export function safeDiv(x: number, y: number): number {
 
 export function safeSqrt(x: number): number {
 	return Math.floor(Math.sqrt(x));
+}
+
+export function normalizeAngle(x: number) {
+	x %= MAX_INT_ANGLE;
+	if (x < 0)
+		x += MAX_INT_ANGLE;
+	return x;
+}
+
+export function angleDiff(x: number, y: number) {
+	let diff = x - y;
+	console.log("DIFF1: " + diff);
+	diff = normalizeAngle(diff);
+	console.log("DIFF2: " + diff);
+	if (diff > safeDiv(MAX_INT_ANGLE, 2))
+		diff -= MAX_INT_ANGLE;
+	console.log("DIFF3: " + diff);
+	return diff;
 }
 
 export const MAX_INT_ANGLE = 1024;
@@ -49,6 +71,8 @@ export function safeCosMul(factor: number, angleInt: number): number {
 }
 
 function safeAtan2Positive(y: number, x: number): number {
+	if (x === 0) return y > 0 ? +MAX_INT_ANGLE / 4 : -MAX_INT_ANGLE / 4;
+	if (y === 0) return x > 0 ? 0                  : +MAX_INT_ANGLE / 2;
 	if (x > y) {
 		return safeAtan[safeDiv(y * ANGLE_TRIGO_MULTIPLIER, x)];
 	} else {
