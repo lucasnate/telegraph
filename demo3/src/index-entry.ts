@@ -1,6 +1,6 @@
 import { createGame } from './Game';
 import Peer, { DataConnection } from 'peerjs';
-import {updateUrlForFriend, onCopy, onOpen} from './renderPage';
+import {updateUrlForFriend, onCopy, onOpen, showCanvas} from './renderPage';
 
 const peer = new Peer();
 let peerId = new URL(window.location.href).searchParams.get('peer');
@@ -36,6 +36,7 @@ if (peerId == null) {
 function registerConnection(conn: DataConnection) {
 	conn.on('open', () => {
 		startTime = Math.floor(Date.now() / 1000.0);
+		showCanvas();
 		createGame(peer, conn.peer, playerNum, syncStateFromPage(), syncStateToPage);
 	});
 	conn.on('error', () => { console.log("ERROR2!"); });

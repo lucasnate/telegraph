@@ -12,6 +12,7 @@ import { assert } from '../../src/util/assert';
 // TODO: Need to get these things through syncData
 export const WORLD_WIDTH = 100000;
 export const WORLD_HEIGHT = 100000;
+export const KIDON_MAX_HP = 10000;
 export const KIDON_MAX_SPEED = safeDiv(KIDON_HEIGHT, 10);
 export const KIDON_FULL_ACCEL_FRAMES = 20;
 export const KIDON_ACCEL = safeDiv(KIDON_MAX_SPEED, KIDON_FULL_ACCEL_FRAMES);
@@ -20,6 +21,10 @@ export const KIDON_TURN_PER_FRAME = safeDiv(MAX_INT_ANGLE, KIDON_FULL_TURN_FRAME
 export const KIDON_SHOT_A_STARTUP_FRAMES = 6;
 export const KIDON_SHOT_A_ACTIVE_FRAMES = 28;
 export const KIDON_SHOT_A_RECOVERY_FRAMES = 6;
+export const KIDON_SHOT_A_ADVANTAGE_ON_HIT = 8;
+export const KIDON_SHOT_A_ADVANTAGE_ON_BLOCK = -1;
+export const KIDON_SHOT_A_HITSTUN_FRAMES = KIDON_SHOT_A_STARTUP_FRAMES + KIDON_SHOT_A_RECOVERY_FRAMES + KIDON_SHOT_A_ADVANTAGE_ON_HIT;
+export const KIDON_SHOT_A_BLOCKSTUN_FRAMES = KIDON_SHOT_A_STARTUP_FRAMES + KIDON_SHOT_A_RECOVERY_FRAMES + KIDON_SHOT_A_ADVANTAGE_ON_BLOCK;
 export const KIDON_SHOT_A_RANGE = KIDON_WIDTH * 6;
 export const KIDON_SHOT_A_SPEED = safeDiv(KIDON_SHOT_A_RANGE, KIDON_SHOT_A_ACTIVE_FRAMES);
 assert(KIDON_SHOT_A_SPEED < safeDiv(KIDON_SHOT_A_WIDTH, 2), "Kidon shot A is too fast! " + KIDON_SHOT_A_SPEED + "," + KIDON_SHOT_A_WIDTH);
@@ -29,6 +34,9 @@ export const KIDON_SHOT_A_TOTAL_TURN = safeDiv(MAX_INT_ANGLE, 4);
 export const KIDON_SHOT_A_TURN_PER_FRAME = safeDiv(KIDON_SHOT_A_TOTAL_TURN, KIDON_SHOT_A_HOMING_FRAMES);
 export const KIDON_SHOT_A_ACCEL_ON_HIT = safeDiv(KIDON_MAX_SPEED, 4);
 export const KIDON_SHOT_A_ACCEL_ON_BLOCK = safeDiv(KIDON_MAX_SPEED, 16);
+export const KIDON_SHOT_A_BLOCKED_DAMAGE = 30;
+export const KIDON_SHOT_A_HIT_DAMAGE = 30;
+
 
 const PLAYER1_START_X = -safeDiv(WORLD_WIDTH, 6);
 const PLAYER1_START_Y = -safeDiv(WORLD_HEIGHT, 6);
@@ -59,7 +67,9 @@ export enum EntityState {
 	Idle,
 	Moving, // TODO: Can "moving" be merged with "recovery"? Should it?
 	Startup,
-	Recovery
+	Recovery,
+	Hitstun,
+	Blockstun,
 }
 
 export enum EntityColor {
@@ -68,6 +78,7 @@ export enum EntityColor {
 
 export interface Entity {
 	type: EntityType,
+	hp: number,
 	x: number,
 	y: number,
 	vx: number,
@@ -147,6 +158,8 @@ function handleEntityState(entity: Entity, addedEntities: Entity[]) {
 					break;
 				case EntityState.Recovery:
 				case EntityState.Moving:
+				case EntityState.Hitstun:
+				case EntityState.Blockstun:
 					if (--entity.framesToStateChange <= 0)
 						entity.state = EntityState.Idle;
 					break;
@@ -154,6 +167,7 @@ function handleEntityState(entity: Entity, addedEntities: Entity[]) {
 					if (--entity.framesToStateChange <= 0) {
 						const newEntity =
 							{type: EntityType.ShotA,
+							 hp: 1, // TODO: Is this the right thing to put here?
 		 					 x: entity.x + safeCosMul(safeDiv(KIDON_HEIGHT, 2), entity.angleInt),
 		 					 y: entity.y + safeSinMul(safeDiv(KIDON_HEIGHT, 2), entity.angleInt),
 		 					 vx: safeCosMul(KIDON_SHOT_A_SPEED, entity.angleInt),
@@ -481,10 +495,13 @@ function handleShipShipCollision(entity1: Entity, entity2: Entity) {
 function handleShipShotACollision(ship: Entity, shot: Entity) {
 	// TODO: Reduce HP from ship.
 	const angle = safeAtan2(ship.y - shot.y, ship.x - shot.x);
-	const isBlocked = ship.state == EntityState.Idle && (shot.color === ship.color || shot.color === EntityColor.Neutral);
+	const isBlocked = (ship.state == EntityState.Idle || ship.state === EntityState.Blockstun) && (shot.color === ship.color || shot.color === EntityColor.Neutral);
 	ship.vx += safeCosMul(isBlocked ? KIDON_SHOT_A_ACCEL_ON_HIT : KIDON_SHOT_A_ACCEL_ON_BLOCK, angle);
 	ship.vy += safeSinMul(isBlocked ? KIDON_SHOT_A_ACCEL_ON_HIT : KIDON_SHOT_A_ACCEL_ON_BLOCK, angle);
 	shot.shouldBeRemoved = true;
+	ship.state = isBlocked ? EntityState.Blockstun : EntityState.Hitstun;
+	ship.framesToStateChange = isBlocked ? KIDON_SHOT_A_HITSTUN_FRAMES : KIDON_SHOT_A_BLOCKSTUN_FRAMES;
+	ship.hp -= isBlocked ? KIDON_SHOT_A_BLOCKED_DAMAGE : KIDON_SHOT_A_HIT_DAMAGE;
 }
 
 function handleShotAShotACollision(e1: Entity, e2: Entity) {
@@ -551,6 +568,7 @@ export function createGameState(): GameState {
 	let player1InputHistory = new Array(256).fill(0);
 	let player2InputHistory = new Array(256).fill(0);
 	return {entities: [{type: EntityType.Ship,
+						hp: KIDON_MAX_HP,
 						x: PLAYER1_START_X,
 						y: PLAYER1_START_Y,
 						vx: 0,
@@ -562,6 +580,7 @@ export function createGameState(): GameState {
 						color: EntityColor.Red,
 						shouldBeRemoved: false},
 					   {type: EntityType.Ship,
+						hp: KIDON_MAX_HP,
 						x: PLAYER2_START_X,
 						y: PLAYER2_START_Y,
 						vx: 0,
@@ -598,6 +617,12 @@ function removeEntities(state: GameState) {
 	}
 	newEntities.length = newEntitiesLength;
 	state.entities = newEntities;
+}
+
+export function getMaxHp(type: EntityType) {
+	if (type === EntityType.Ship)
+		return KIDON_MAX_HP;
+	throw new Error("getMaxHp for unknown");
 }
 
 export function updateGameState(state: GameState, inputs: number[], winningSyncData: GameSyncData): void {

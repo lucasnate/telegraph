@@ -153,7 +153,7 @@ class Game {
 					if (this.loopFpsSecond === curFpsSecond)
 						++this.loopFps;
 					else {
-						document.getElementById("debug1")!.innerText = this.loopFps.toString();
+						this.renderer.fpsDisplayValue = this.loopFps;
 						this.loopLastFps = this.loopFps;
 						this.loopFps = 1;
 						this.loopFpsSecond = curFpsSecond;
