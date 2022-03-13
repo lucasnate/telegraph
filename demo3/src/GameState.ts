@@ -2,12 +2,20 @@
 
 import { SyncData, InputValues } from '../../src/types';
 import { RingBuffer } from '../../src/util/RingBuffer';
-import { safeDiv, safeSqrt, MAX_INT_ANGLE, safeCosMul, safeSinMul, safeAtan2, abs, angleDiff, normalizeAngle } from './safeCalc';
+import { safeDiv, safeSqrt, MAX_INT_ANGLE, safeCosMul, safeSinMul, safeAtan2, abs, angleDiff, normalizeAngle, min, max } from './safeCalc';
 import { abstractKeyUpMask, abstractKeyLeftMask, abstractKeyRightMask, abstractKeyDownMask, abstractKeySwitchMask, abstractKeyAMask } from './Inputter';
 
 import { KIDON_WIDTH, KIDON_HEIGHT, KIDON_SHOT_A_WIDTH, KIDON_TRIANGLES, KIDON_SHOT_A_TRIANGLES, KIDON_COARSE_RADIUS, KIDON_SHOT_A_COARSE_RADIUS } from './shipShapes';
 import { Point, rotateAndTranslate } from './spatial';
 import { assert } from '../../src/util/assert';
+
+// TODO: Death
+// TODO: Should have two different buttons for color switch
+// TODO: Battery
+// TODO: Weapon 2A
+// TODO: Shift
+// TODO: Weapon Shift-A
+// TODO: Allow increasing zoom out faster than zoom in, increaes zoom in at a slower rate.
 
 // TODO: Need to get these things through syncData
 export const WORLD_WIDTH = 100000;
@@ -16,6 +24,7 @@ export const KIDON_MAX_HP = 10000;
 export const KIDON_MAX_SPEED = safeDiv(KIDON_HEIGHT, 10);
 export const KIDON_FULL_ACCEL_FRAMES = 20;
 export const KIDON_ACCEL = safeDiv(KIDON_MAX_SPEED, KIDON_FULL_ACCEL_FRAMES);
+export const KIDON_STABLIZE_ACCEL = safeDiv(KIDON_ACCEL, 4);
 export const KIDON_FULL_TURN_FRAMES = 60;
 export const KIDON_TURN_PER_FRAME = safeDiv(MAX_INT_ANGLE, KIDON_FULL_TURN_FRAMES);
 export const KIDON_SHOT_A_STARTUP_FRAMES = 6;
@@ -30,12 +39,12 @@ export const KIDON_SHOT_A_SPEED = safeDiv(KIDON_SHOT_A_RANGE, KIDON_SHOT_A_ACTIV
 assert(KIDON_SHOT_A_SPEED < safeDiv(KIDON_SHOT_A_WIDTH, 2), "Kidon shot A is too fast! " + KIDON_SHOT_A_SPEED + "," + KIDON_SHOT_A_WIDTH);
 assert(KIDON_SHOT_A_SPEED > KIDON_MAX_SPEED * 2, "Kidon shot A is too slow! " + KIDON_SHOT_A_SPEED + "," + KIDON_MAX_SPEED);
 export const KIDON_SHOT_A_HOMING_FRAMES = 6;
-export const KIDON_SHOT_A_TOTAL_TURN = safeDiv(MAX_INT_ANGLE, 4);
+export const KIDON_SHOT_A_TOTAL_TURN = safeDiv(MAX_INT_ANGLE, 8);
 export const KIDON_SHOT_A_TURN_PER_FRAME = safeDiv(KIDON_SHOT_A_TOTAL_TURN, KIDON_SHOT_A_HOMING_FRAMES);
 export const KIDON_SHOT_A_ACCEL_ON_HIT = safeDiv(KIDON_MAX_SPEED, 4);
 export const KIDON_SHOT_A_ACCEL_ON_BLOCK = safeDiv(KIDON_MAX_SPEED, 16);
 export const KIDON_SHOT_A_BLOCKED_DAMAGE = 30;
-export const KIDON_SHOT_A_HIT_DAMAGE = 30;
+export const KIDON_SHOT_A_HIT_DAMAGE = 300;
 
 
 const PLAYER1_START_X = -safeDiv(WORLD_WIDTH, 6);
@@ -100,6 +109,8 @@ export interface GameState {
 	player1InputHistoryNextIndex: number,
 	player2InputHistory: number[],
 	player2InputHistoryNextIndex: number,
+	player1CurrentComboHits: number
+	player2CurrentComboHits: number
 }
 
 function norm2sq(x: number,y: number): number {
@@ -107,22 +118,30 @@ function norm2sq(x: number,y: number): number {
 }
 
 function handleEntityKeyboard(entity: Entity, input: number, inputHistory: number[], inputHistoryNextIndex: number) {
-	const idleOrMoving = entity.state === EntityState.Idle || entity.state === EntityState.Moving;
+	const stun = entity.state === EntityState.Hitstun || entity.state === EntityState.Blockstun;
 	const lastInput = inputHistory[inputHistoryNextIndex - 1 < 0 ? (inputHistory.length - 1) : inputHistoryNextIndex - 1];
-	if ((input & abstractKeyAMask) && !(lastInput & abstractKeyAMask) && idleOrMoving) {
+	if ((input & abstractKeyAMask) && !(lastInput & abstractKeyAMask) && !stun) {
 		entity.state = EntityState.Startup;
 		entity.framesToStateChange = KIDON_SHOT_A_STARTUP_FRAMES;
-	} else if ((input & abstractKeyUpMask) && idleOrMoving) {
-		entity.vx += safeCosMul(KIDON_ACCEL, entity.angleInt);
-		entity.vy += safeSinMul(KIDON_ACCEL, entity.angleInt);
-		if (norm2sq(entity.vx, entity.vy) > KIDON_MAX_SPEED * KIDON_MAX_SPEED) {
-			const angleInt = safeAtan2(entity.vy, entity.vx);
-			entity.vx = safeCosMul(KIDON_MAX_SPEED, angleInt);
-			entity.vy = safeSinMul(KIDON_MAX_SPEED, angleInt);
+	} else if ((input & abstractKeyUpMask) && !stun) {
+		const newVx = entity.vx + safeCosMul(KIDON_ACCEL, entity.angleInt);
+		const newVy = entity.vy + safeSinMul(KIDON_ACCEL, entity.angleInt);
+		const newNormSq = norm2sq(newVx, newVy);
+		if (newNormSq > KIDON_MAX_SPEED * KIDON_MAX_SPEED) {
+			const newNorm = safeSqrt(newNormSq);
+			const allowedNorm = max(min(newNorm, safeSqrt(norm2sq(entity.vx, entity.vy))), KIDON_MAX_SPEED);
+			entity.vx = safeDiv(newVx * allowedNorm, newNorm);
+			entity.vy = safeDiv(newVy * allowedNorm, newNorm);
+		} else {
+			entity.vx = newVx;
+			entity.vy = newVy;
 		}
-		entity.state = EntityState.Moving;
-		entity.framesToStateChange = FRAMES_TO_IDLE_AFTER_UP + 1; // TODO: If we merge handleEntityKeyboard with handleEntityState, might need to get rid of this +1.
-	} else if ((input & abstractKeyDownMask) && idleOrMoving) {
+			
+		if (entity.state === EntityState.Idle || entity.state === EntityState.Moving) {
+			entity.state = EntityState.Moving;
+			entity.framesToStateChange = FRAMES_TO_IDLE_AFTER_UP + 1; // TODO: If we merge handleEntityKeyboard with handleEntityState, might need to get rid of this +1.
+		}
+	} else if ((input & abstractKeyDownMask) && !stun) {
 		let norm2 = norm2sq(entity.vx, entity.vy);
 		if (norm2 < KIDON_ACCEL * KIDON_ACCEL) {
 			entity.vx = 0;
@@ -153,6 +172,16 @@ function handleEntityKeyboard(entity: Entity, input: number, inputHistory: numbe
 function handleEntityState(entity: Entity, addedEntities: Entity[]) {
 	switch (entity.type) {
 		case EntityType.Ship:
+			if (entity.state !== EntityState.Hitstun) {
+				const normSq = norm2sq(entity.vx, entity.vy);
+				if (normSq > KIDON_MAX_SPEED * KIDON_MAX_SPEED) {
+					const norm = safeSqrt(normSq);
+					const newNorm = max(norm - KIDON_STABLIZE_ACCEL, KIDON_MAX_SPEED);
+					entity.vx = safeDiv(entity.vx * newNorm, norm);
+					entity.vy = safeDiv(entity.vy * newNorm, norm);
+					console.log(JSON.stringify({norm: norm, newNorm: newNorm}));
+				}
+			}
 			switch (entity.state) {
 				case EntityState.Idle:
 					break;
@@ -464,7 +493,7 @@ function fineCollision(entity1: Entity, entity2: Entity) {
 	return false;
 }
 
-function handleShipShipCollision(entity1: Entity, entity2: Entity) {
+function handleShipShipCollision(state: GameState, entity1: Entity, entity2: Entity) {
 	// TODO: For now, I assume all objects have the same mass.
 
 	// See https://en.wikipedia.org/wiki/Elastic_collision#Two-dimensional
@@ -492,24 +521,59 @@ function handleShipShipCollision(entity1: Entity, entity2: Entity) {
 	}
 }
 
-function handleShipShotACollision(ship: Entity, shot: Entity) {
+const IS_DISAPPEAR_ON_HIT_MAP = (() => {
+	let map = new Map<EntityType, boolean>();
+	map.set(EntityType.ShotA, true);
+	map.set(EntityType.Ship, false);
+	return map;
+})();
+for (const value1 in EntityType) {
+	const value1Num = Number(value1);
+	if (isNaN(value1Num)) continue;
+	if (IS_DISAPPEAR_ON_HIT_MAP.get(value1Num) == null)
+		throw new Error("Missing value in IS_DISAPPEAR_ON_HIT_MAP");
+}
+
+function handleShipShotACollision(state: GameState, ship: Entity, shot: Entity) {
 	// TODO: Reduce HP from ship.
 	const angle = safeAtan2(ship.y - shot.y, ship.x - shot.x);
-	const isBlocked = (ship.state == EntityState.Idle || ship.state === EntityState.Blockstun) && (shot.color === ship.color || shot.color === EntityColor.Neutral);
-	ship.vx += safeCosMul(isBlocked ? KIDON_SHOT_A_ACCEL_ON_HIT : KIDON_SHOT_A_ACCEL_ON_BLOCK, angle);
-	ship.vy += safeSinMul(isBlocked ? KIDON_SHOT_A_ACCEL_ON_HIT : KIDON_SHOT_A_ACCEL_ON_BLOCK, angle);
+	const isBlocked = (ship.state == EntityState.Idle || ship.state === EntityState.Blockstun) && (shot.color === ship.color || shot.color === EntityColor.Neutral) && false;
+	const dvx = safeCosMul(isBlocked ? KIDON_SHOT_A_ACCEL_ON_BLOCK : KIDON_SHOT_A_ACCEL_ON_HIT, angle);
+	const dvy = safeSinMul(isBlocked ? KIDON_SHOT_A_ACCEL_ON_BLOCK : KIDON_SHOT_A_ACCEL_ON_HIT, angle);
+	if (!isBlocked && ship.state !== EntityState.Hitstun) {
+		ship.vx = dvx;
+		ship.vy = dvy;
+		for (let i = 0, l = state.entities.length; i < l; ++i) {
+			const entity = state.entities[i];
+			if (entity.collisionSide === ship.collisionSide) {
+				if (IS_DISAPPEAR_ON_HIT_MAP.get(entity.type)!) {
+					entity.shouldBeRemoved = true;
+				}
+			}
+		}
+		if (ship.collisionSide === CollisionSide.PlayerOne) state.player2CurrentComboHits = 0;
+		else state.player1CurrentComboHits = 0;
+	} else {
+		ship.vx += dvx;
+		ship.vy += dvy;
+	}
+	if (!isBlocked) {
+		if (ship.collisionSide === CollisionSide.PlayerOne) ++state.player2CurrentComboHits;
+		else ++state.player1CurrentComboHits;
+	}
+		
 	shot.shouldBeRemoved = true;
 	ship.state = isBlocked ? EntityState.Blockstun : EntityState.Hitstun;
-	ship.framesToStateChange = isBlocked ? KIDON_SHOT_A_HITSTUN_FRAMES : KIDON_SHOT_A_BLOCKSTUN_FRAMES;
+	ship.framesToStateChange = isBlocked ? KIDON_SHOT_A_BLOCKSTUN_FRAMES : KIDON_SHOT_A_HITSTUN_FRAMES;
 	ship.hp -= isBlocked ? KIDON_SHOT_A_BLOCKED_DAMAGE : KIDON_SHOT_A_HIT_DAMAGE;
 }
 
-function handleShotAShotACollision(e1: Entity, e2: Entity) {
+function handleShotAShotACollision(state: GameState, e1: Entity, e2: Entity) {
 	e1.shouldBeRemoved = true;
 	e2.shouldBeRemoved = true;
 }
 
-type CollisionHandler = { (x: Entity, y: Entity): void; };
+type CollisionHandler = { (state: GameState, x: Entity, y: Entity): void; };
 const COLLISION_HANDLER_MAP = (() => {
 	let map = new Map<EntityType, Map<EntityType, CollisionHandler>>();
 	let shipMap = new Map<EntityType, CollisionHandler>();
@@ -533,14 +597,15 @@ for (const value1 in EntityType) {
 			throw new Error("Unrequired collision handler function: " + JSON.stringify([value1Num, value2Num]));
 	}
 }
-function handleEntityPairCollision(entity1: Entity, entity2: Entity) {
+function handleEntityPairCollision(state: GameState, entity1: Entity, entity2: Entity) {
 	if (entity1.type <= entity2.type)
-		COLLISION_HANDLER_MAP.get(entity1.type)!.get(entity2.type)!(entity1, entity2);
+		COLLISION_HANDLER_MAP.get(entity1.type)!.get(entity2.type)!(state, entity1, entity2);
 	else
-		COLLISION_HANDLER_MAP.get(entity2.type)!.get(entity1.type)!(entity2, entity1);
+		COLLISION_HANDLER_MAP.get(entity2.type)!.get(entity1.type)!(state, entity2, entity1);
 }
 
-function getAndHandleEntityCollisions(entity_i: number, entities: Entity[]) {
+function getAndHandleEntityCollisions(entity_i: number, state: GameState) {
+	let entities = state.entities;
 	let entity = entities[entity_i];
 	for (let i = entity_i, l = entities.length; i < l; ++i) {
 		let otherEntity = entities[i];
@@ -552,16 +617,16 @@ function getAndHandleEntityCollisions(entity_i: number, entities: Entity[]) {
 		if (!fineCollision(entity, otherEntity))
 			continue;
 
-		handleEntityPairCollision(entity, otherEntity);
+		handleEntityPairCollision(state, entity, otherEntity);
 	}
 }
 
-function handleCollisions(entity_i: number, entities: Entity[]) {
-	let entity = entities[entity_i];
+function handleCollisions(entity_i: number, state: GameState) {
+	let entity = state.entities[entity_i];
 	let wci = {excessPositiveY: 0, excessPositiveX: 0, excessNegativeY: 0, excessNegativeX: 0};
 	getWallCollisions(entity, wci);
 	handleWallCollisions(entity, wci);
-	getAndHandleEntityCollisions(entity_i, entities);
+	getAndHandleEntityCollisions(entity_i, state);
 }
 
 export function createGameState(): GameState {
@@ -594,7 +659,9 @@ export function createGameState(): GameState {
 			player1InputHistory: player1InputHistory,
 			player1InputHistoryNextIndex: 0,
 			player2InputHistory: player2InputHistory,
-			player2InputHistoryNextIndex: 0};
+			player2InputHistoryNextIndex: 0,
+			player1CurrentComboHits: 0,
+			player2CurrentComboHits: 0};
 }
 
 function updateInputHistory(state: GameState, inputs: number[]) {
@@ -628,7 +695,7 @@ export function getMaxHp(type: EntityType) {
 export function updateGameState(state: GameState, inputs: number[], winningSyncData: GameSyncData): void {
 	for (let i = 0, l = state.entities.length; i < l; ++i) {
 		handleEntityMovement(state.entities[i], state.entities[PLAYER1_INDEX], state.entities[PLAYER2_INDEX]);
-		handleCollisions(i, state.entities);
+		handleCollisions(i, state);
 	}
 	let pt1 = {x: KIDON_TRIANGLES[0], y: KIDON_TRIANGLES[1]};
 	let pt2 = {x: KIDON_TRIANGLES[2], y: KIDON_TRIANGLES[3]};

@@ -150,7 +150,14 @@ function getIdleShipColor(entity: Entity) {
 }
 
 function getMovingShipColor(entity: Entity) {
-	return {r: 0.5, g: 0.5, b:0.5};
+	switch (entity.color) {
+		case EntityColor.Red:
+			return {r: 0.7, g: 0.5, b:0.5};
+		case EntityColor.Blue:
+			return {r: 0.5, g: 0.5, b:0.7};
+		default:
+			throw new Error("Unknown color");
+	}
 }
 
 function getStartupShipColor(entity: Entity) {
@@ -243,6 +250,8 @@ const BAR_COUNT = 3;
 const BAR_HSEP_RATIO = 1;
 const BAR_VSEP_RATIO = 1;
 const TITLE_VSEP_RATIO = 1;
+const TITLE_RATIO = 0.5;
+const COMBO_HITS_RATIO = 0.25;
 const MAX_HP_GLOW_FRAMES = 16;
 
 export class Renderer {
@@ -260,6 +269,7 @@ export class Renderer {
 	lastPlayerCanvasHeight: number = 0;
 	barWidth: number = 0;
 	titleFontSize: number = 0;
+	comboFontSize: number = 0;
 	hpFontSize: number = 0;
 	battFontSize: number = 0;
 	warpFontSize: number = 0;
@@ -543,7 +553,8 @@ export class Renderer {
 			return;
 		}
 		this.barWidth = canvas.width / (BAR_COUNT + (BAR_COUNT - 1) * BAR_HSEP_RATIO);
-		this.titleFontSize = this.getBestFontSize('Player 12', canvas.width);
+		this.titleFontSize = this.getBestFontSize('Player 12', canvas.width * TITLE_RATIO);
+		this.comboFontSize = this.getBestFontSize('000 hits', canvas.width * COMBO_HITS_RATIO);
 		this.hpFontSize = this.getBestFontSize(Hp, this.barWidth);
 		this.battFontSize = this.getBestFontSize(BATT, this.barWidth);
 		this.warpFontSize = this.getBestFontSize(WARP, this.barWidth);
@@ -583,6 +594,7 @@ export class Renderer {
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 		ctx.fillStyle = 'white';
 		ctx.fillText(isPlayer2 ? 'Player 2' : 'Player 1', 0, this.titleHeight);
+		ctx.fillText((isPlayer2 ? state.player2CurrentComboHits : state.player1CurrentComboHits).toString() + " hits", canvas.width * (1 - COMBO_HITS_RATIO), this.titleHeight);
 		if (!isPlayer2) {
 			ctx.font = '10px monospace';
 			ctx.fillText(this.fpsDisplayValue.toString(), 0, canvas.height);

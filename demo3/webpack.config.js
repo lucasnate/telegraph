@@ -17,11 +17,11 @@ const config = (entry) => {
     },
     output: {
       path: path.join(__dirname, 'dist'),
-      filename: `${name}.js`,
+      filename: `${name}.[hash].js`,
       devtoolModuleFilenameTemplate: '[absolute-resource-path]',
     },
     optimization: {
-      minimize: false,
+      minimize: true,
     },
     performance: {
       hints: false,
