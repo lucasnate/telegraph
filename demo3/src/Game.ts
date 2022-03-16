@@ -166,7 +166,7 @@ class Game {
         const lagOffset = this.loopLag / FRAME_STEP;
 		const networkStats = this.telegraph.getNetworkStats(this.remotePlayerHandle!).value;
 		if (isRender) {
-			this.renderer.render(this.gameState);
+			this.renderer.render(this.gameState, this.localPlayerHandle!);
 		}
         this.loopLastTime = time;
 		if (isRender) {

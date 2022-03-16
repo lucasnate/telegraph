@@ -360,12 +360,11 @@ class Game {
 				this.gain = null;
 			}
 			var o = this.oscillator = ctx.createOscillator();
-			o.frequency.value = 20;
+			o.frequency.value = 200;
 			let g = this.gain = ctx.createGain();
-			g.gain.value = 0;
-			g.connect(ctx.destination);
+			g.gain.value = 0.01;
 			o.start(0);
-			o.connect(ctx.destination);
+			o.connect(g).connect(ctx.destination);
 
 			if (document.visibilityState == "visible" && interval != null)
 				clearInterval(interval);

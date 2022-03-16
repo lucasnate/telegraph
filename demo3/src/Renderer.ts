@@ -1,9 +1,7 @@
-// You must make camera movement softer, it fucking makes you sick!
-
 import { mat4, vec2, vec3 } from 'gl-matrix';
-import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp } from './GameState';
-import { MAX_INT_ANGLE, max } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_SHOT_A_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
+import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp, WinScreen } from './GameState';
+import { MAX_INT_ANGLE, max, min } from './safeCalc';
+import { KIDON_TRIANGLES, KIDON_SHOT_A_TRIANGLES, KIDON_SHOT_B_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
 
 // Vertex shader program
 const VERTEX_SHADER_SOURCE = `
@@ -45,17 +43,14 @@ interface ProgramInfo {
 	uniformLocations: UniformLocations;
 }
 
+type BufferWithCount = { buffer: WebGLBuffer, count: number };
+type EntityBufferMap = Map<EntityType, BufferWithCount>;
+
 interface Buffers {
-	kidon: WebGLBuffer;
-	kidonVertexCount: number;
-	kidonShotA: WebGLBuffer;
-	kidonShotAVertexCount: number;
-	grid: WebGLBuffer;
-	gridVertexCount: number;
-	stars: WebGLBuffer;
-	starsVertexCount: number;
-	margin: WebGLBuffer;
-	marginVertexCount: number;
+	entityBuffers: EntityBufferMap;
+	grid: BufferWithCount;
+	stars: BufferWithCount;
+	margin: BufferWithCount;
 };
 
 let debug = 200;
@@ -194,6 +189,7 @@ const SHIP_COLOR_HANDLER_MAP = (() => {
 	map.set(EntityState.Recovery, getMovingShipColor);
 	map.set(EntityState.Moving, getMovingShipColor);
 	map.set(EntityState.Startup, getStartupShipColor);
+	map.set(EntityState.Active, getStartupShipColor);
 	map.set(EntityState.Hitstun, getHitstunShipColor);
 	map.set(EntityState.Blockstun, getBlockstunShipColor);
 	return map;
@@ -202,14 +198,14 @@ for (const value1 in EntityState) {
 	const value1Num = Number(value1);
 	if (isNaN(value1Num)) continue;
 	if (SHIP_COLOR_HANDLER_MAP.get(value1Num) == null)
-		throw new Error("Missing color handler function");
+		throw new Error("Missing ship color handler function");
 }
 
 function getShipColor(entity: Entity) {
 	return SHIP_COLOR_HANDLER_MAP.get(entity.state)!(entity);
 }
 
-function getShotAColor(entity: Entity) {
+function getShotColor(entity: Entity) {
 	switch (entity.color) {
 		case EntityColor.Neutral:
 			return {r: 1, g: 1, b: 1};
@@ -225,14 +221,15 @@ function getShotAColor(entity: Entity) {
 const ENTITY_COLOR_HANDLER_MAP = (() => {
 	let map = new Map<EntityType, EntityColorHandler>();
 	map.set(EntityType.Ship, getShipColor);
-	map.set(EntityType.ShotA, getShotAColor);
+	map.set(EntityType.ShotA, getShotColor);
+	map.set(EntityType.ShotB, getShotColor);
 	return map;
 })();
 for (const value1 in EntityType) {
 	const value1Num = Number(value1);
 	if (isNaN(value1Num)) continue;
 	if (ENTITY_COLOR_HANDLER_MAP.get(value1Num) == null)
-		throw new Error("Missing color handler function");
+		throw new Error("Missing entity color handler function");
 }
 
 function getEntityColor(entity: Entity) {
@@ -269,12 +266,15 @@ export class Renderer {
 	lastPlayerCanvasHeight: number = 0;
 	barWidth: number = 0;
 	titleFontSize: number = 0;
+	winFontSize: number = 0;
 	comboFontSize: number = 0;
 	hpFontSize: number = 0;
 	battFontSize: number = 0;
 	warpFontSize: number = 0;
 	barSymbolHeight: number = 0;
 	titleHeight: number = 0;
+	winHeight: number = 0;
+	comboHeight: number = 0;
 	hpWidth: number = 0;
 	battWidth: number = 0;
 	warpWidth: number = 0;
@@ -353,6 +353,10 @@ export class Renderer {
 		return ret;
 	}
 
+	bufferWithCount(vertices: number[]) {
+		return {buffer: this.createBuffer(vertices), count: vertices.length / 2};
+	}
+
 	createBuffer(vertices: number[]): WebGLBuffer {
 		const buffer = this.gl.createBuffer();
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
@@ -361,17 +365,14 @@ export class Renderer {
 	}
 
 	createBuffers() {
+		let map = new Map([[EntityType.Ship, this.bufferWithCount(KIDON_TRIANGLES)],
+						   [EntityType.ShotA, this.bufferWithCount(KIDON_SHOT_A_TRIANGLES)],
+						   [EntityType.ShotB, this.bufferWithCount(KIDON_SHOT_B_TRIANGLES)]]);
 		return {
-			kidon: this.createBuffer(KIDON_TRIANGLES),
-			kidonVertexCount: KIDON_TRIANGLES.length / 2,
-			kidonShotA: this.createBuffer(KIDON_SHOT_A_TRIANGLES),
-			kidonShotAVertexCount: KIDON_SHOT_A_TRIANGLES.length / 2,
-			grid: this.createBuffer(GRID_LINES),
-			gridVertexCount: GRID_LINES.length / 2,
-			stars: this.createBuffer(STAR_TRIANGLES),
-			starsVertexCount: STAR_TRIANGLES.length / 2,
-			margin: this.createBuffer(MARGIN_TRIANGLES),
-			marginVertexCount: MARGIN_TRIANGLES.length / 2
+			entityBuffers: map,
+			grid: this.bufferWithCount(GRID_LINES),
+			stars: this.bufferWithCount(STAR_TRIANGLES),
+			margin: this.bufferWithCount(MARGIN_TRIANGLES),
 		};
 	}
 	
@@ -477,29 +478,29 @@ export class Renderer {
 
 	renderStars() {
 		this.gl.uniformMatrix4fv(this.programInfo.uniformLocations.modelSpecificMatrix, false, mat4.create());
-		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.stars);
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.stars.buffer);
 		this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
 		this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
 		this.gl.uniform4f(this.programInfo.uniformLocations.color, 0.8, 0.8, 0.8, 1);
-		this.gl.drawArrays(this.gl.TRIANGLES, 0, this.buffers.starsVertexCount);
+		this.gl.drawArrays(this.gl.TRIANGLES, 0, this.buffers.stars.count);
 	}
 
 	renderGrid() {
 		this.gl.uniformMatrix4fv(this.programInfo.uniformLocations.modelSpecificMatrix, false, mat4.create());
-		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.grid);
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.grid.buffer);
 		this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
 		this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
 		this.gl.uniform4f(this.programInfo.uniformLocations.color, 0.3, 0.3, 0.3, 1);
-		this.gl.drawArrays(this.gl.LINES, 0, this.buffers.gridVertexCount);
+		this.gl.drawArrays(this.gl.LINES, 0, this.buffers.grid.count);
 	}
 
 	renderMargin() {
 		this.gl.uniformMatrix4fv(this.programInfo.uniformLocations.modelSpecificMatrix, false, mat4.create());
-		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.margin);
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.margin.buffer);
 		this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
 		this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
 		this.gl.uniform4f(this.programInfo.uniformLocations.color, 0.5, 0.25, 0.5, 1);
-		this.gl.drawArrays(this.gl.TRIANGLES, 0, this.buffers.marginVertexCount);
+		this.gl.drawArrays(this.gl.TRIANGLES, 0, this.buffers.margin.count);
 	}
 	
 	renderEntities(state: GameState) {
@@ -515,23 +516,12 @@ export class Renderer {
 			mat4.identity(matrix);
 			mat4.translate(matrix, matrix, pos);
 			mat4.rotate(matrix, matrix, state.entities[i].angleInt * 2 * Math.PI / MAX_INT_ANGLE, [0,0,1]);
-			let vertexCount = 0;
-			switch (state.entities[i].type) {
-				case EntityType.Ship: 
-					this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.kidon);
-					vertexCount = this.buffers.kidonVertexCount;
-					break;
-				case EntityType.ShotA: 
-					this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.kidonShotA);
-					vertexCount = this.buffers.kidonShotAVertexCount;
-					break;
-				default:
-					throw new Error("Unknown entity to draW");
-			}
+			let bufWithCnt = this.buffers.entityBuffers.get(state.entities[i].type)!;
+			this.gl.bindBuffer(this.gl.ARRAY_BUFFER, bufWithCnt.buffer);
 			this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
 			this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
 			this.gl.uniformMatrix4fv(this.programInfo.uniformLocations.modelSpecificMatrix, false, matrix);
-			this.gl.drawArrays(this.gl.TRIANGLES, 0, vertexCount);
+			this.gl.drawArrays(this.gl.TRIANGLES, 0, bufWithCnt.count);
 		}
 	}
 
@@ -554,6 +544,9 @@ export class Renderer {
 		}
 		this.barWidth = canvas.width / (BAR_COUNT + (BAR_COUNT - 1) * BAR_HSEP_RATIO);
 		this.titleFontSize = this.getBestFontSize('Player 12', canvas.width * TITLE_RATIO);
+		this.winFontSize = min(min(this.getBestFontSize('Lose', canvas.width),
+								   this.getBestFontSize('Win', canvas.width)),
+							   this.getBestFontSize('Draw', canvas.width));
 		this.comboFontSize = this.getBestFontSize('000 hits', canvas.width * COMBO_HITS_RATIO);
 		this.hpFontSize = this.getBestFontSize(Hp, this.barWidth);
 		this.battFontSize = this.getBestFontSize(BATT, this.barWidth);
@@ -570,6 +563,10 @@ export class Renderer {
 		this.barSymbolHeight = Math.max(textMetricsHeight(warpMeasure), this.barSymbolHeight);
 		ctx.font = this.titleFontSize.toString() + 'px monospace';
 		this.titleHeight = textMetricsHeight(ctx.measureText('Player 12'));
+		ctx.font = this.winFontSize.toString() + 'px monospace';
+		this.winHeight = max(max(textMetricsHeight(ctx.measureText('Lose')),
+								 textMetricsHeight(ctx.measureText('Win'))),
+							 textMetricsHeight(ctx.measureText('Draw')));
 		this.hpWidth = hpMeasure.width;
 		this.battWidth = battMeasure.width;
 		this.warpWidth = warpMeasure.width;
@@ -577,12 +574,16 @@ export class Renderer {
 		this.lastPlayerCanvasHeight = canvas.height;
 	}
 
-	renderSinglePlayerCanvas(state: GameState, isPlayer2: boolean) {	
+	renderSinglePlayerCanvas(state: GameState, isPlayer2: boolean, localPlayerHandle: number) {
+		if (localPlayerHandle !== 1 && localPlayerHandle !== 2) {
+			throw new Error("unexpected localPlayerHandle in renderSinglePlayerCanvas");
+		}
+		const localIsPlayer2 = localPlayerHandle === 1;
 		const ctx = isPlayer2 ? this.player2 : this.player1;
 		const canvas = isPlayer2 ? this.player2Canvas : this.player1Canvas;
 		const width = canvas.width, height = canvas.height;
 		const barWidth = width / (BAR_COUNT + (BAR_COUNT - 1) * BAR_HSEP_RATIO);
-		const barTop = this.titleHeight * (1 + TITLE_VSEP_RATIO);
+		const barTop = max(this.titleHeight, this.comboHeight) * (1 + TITLE_VSEP_RATIO);
 		const barBottom = height - (1 + BAR_VSEP_RATIO) * this.barSymbolHeight;
 		const entity = state.entities[isPlayer2 ? PLAYER2_INDEX : PLAYER1_INDEX];
 		const maxHp = getMaxHp(entity.type);
@@ -593,6 +594,23 @@ export class Renderer {
 		ctx.fillStyle = 'black';
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 		ctx.fillStyle = 'white';
+		if (state.winScreen !== WinScreen.None) {
+			ctx.font = this.winFontSize.toString() + 'px monospace';
+			switch (state.winScreen) {
+				case WinScreen.Player1:
+					ctx.fillText(localIsPlayer2 ? 'Lose' : 'Win', 0, this.winHeight);
+					break;
+				case WinScreen.Player2:
+					ctx.fillText(localIsPlayer2 ? 'Win' : 'Lose', 0, this.winHeight);
+					break;
+				case WinScreen.Draw:
+					ctx.fillText('Draw', 0, this.winHeight);
+					break;
+				default:
+					throw new Error("Unknown win screen value");
+			}
+			return;
+		}
 		ctx.fillText(isPlayer2 ? 'Player 2' : 'Player 1', 0, this.titleHeight);
 		ctx.fillText((isPlayer2 ? state.player2CurrentComboHits : state.player1CurrentComboHits).toString() + " hits", canvas.width * (1 - COMBO_HITS_RATIO), this.titleHeight);
 		if (!isPlayer2) {
@@ -627,19 +645,21 @@ export class Renderer {
 		ctx.fillRect(barWidth * 2 * (BAR_HSEP_RATIO + 1), barTop, barWidth, barBottom - barTop);		
 	}
 		
-	renderPlayerCanvas(state: GameState) {
+	renderPlayerCanvas(state: GameState, localPlayerHandle: number) {
 		this.recalculateFontSizes();
-		this.renderSinglePlayerCanvas(state, false);
-		this.renderSinglePlayerCanvas(state, true);
+		this.renderSinglePlayerCanvas(state, false, localPlayerHandle);
+		this.renderSinglePlayerCanvas(state, true, localPlayerHandle);
 	}
 	
-	render(state: GameState) {
+	render(state: GameState, localPlayerHandle: number) {
+		// if localPlayerHandle is passed to other functions except for renderPlayerCanvas,
+		// it is likely we're doing something wrong.
 		this.clear();
 		this.setupCameraMatrix(state);
 		// this.renderGrid();
 		this.renderStars();
 		this.renderMargin();
 		this.renderEntities(state);
-		this.renderPlayerCanvas(state);
+		this.renderPlayerCanvas(state, localPlayerHandle);
 	}
 }
