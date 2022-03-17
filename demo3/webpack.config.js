@@ -21,7 +21,7 @@ const config = (entry) => {
       devtoolModuleFilenameTemplate: '[absolute-resource-path]',
     },
     optimization: {
-      minimize: false,
+      minimize: true,
     },
     performance: {
       hints: false,

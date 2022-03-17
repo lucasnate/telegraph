@@ -53,7 +53,7 @@ export const KIDON_SHOT_A_HIT_DAMAGE = 300;
 export const KIDON_SHOT_B_STARTUP_FRAMES = 15;
 export const KIDON_SHOT_B_ACTIVE_FRAMES = 5;
 export const KIDON_SHOT_B_RECOVERY_FRAMES = 20;
-export const KIDON_SHOT_B_ACCEL_ON_HIT = safeDiv(KIDON_MAX_SPEED, 4);
+export const KIDON_SHOT_B_ACCEL_ON_HIT = safeDiv(KIDON_MAX_SPEED, 8);
 export const KIDON_SHOT_B_ACCEL_ON_BLOCK = safeDiv(KIDON_MAX_SPEED, 16);
 export const KIDON_SHOT_B_ADVANTAGE_ON_HIT = 18;
 export const KIDON_SHOT_B_ADVANTAGE_ON_BLOCK = -10;
@@ -61,6 +61,7 @@ export const KIDON_SHOT_B_HITSTUN_FRAMES = KIDON_SHOT_B_ACTIVE_FRAMES + KIDON_SH
 export const KIDON_SHOT_B_BLOCKSTUN_FRAMES = KIDON_SHOT_B_ACTIVE_FRAMES + KIDON_SHOT_B_RECOVERY_FRAMES + KIDON_SHOT_B_ADVANTAGE_ON_BLOCK;
 export const KIDON_SHOT_B_BLOCKED_DAMAGE = 90;
 export const KIDON_SHOT_B_HIT_DAMAGE = 900;
+export const KIDON_SHOT_B_TURN = safeDiv(MAX_INT_ANGLE, 32);
 
 const WIN_SCREEN_FRAMES = 300;
 
@@ -198,7 +199,7 @@ function handleEntityKeyboard(entity: Entity, input: number, inputHistory: numbe
 		entity.angleInt = normalizeAngle(entity.angleInt - KIDON_TURN_PER_FRAME);
 	}
 		
-	if ((input & abstractKeySwitchMask) && !(lastInput & abstractKeySwitchMask)) {
+	if ((input & abstractKeySwitchMask) && !(lastInput & abstractKeySwitchMask) && !usingWeapon) {
 		console.log({input: input, lastInput: lastInput, inputHistory: inputHistory, inputHistoryNextIndex: inputHistoryNextIndex});
 		entity.color = entity.color === EntityColor.Red ? EntityColor.Blue : EntityColor.Red;
 	}
@@ -210,7 +211,9 @@ enum Move {
 	_5B
 }
 
-function activate5A(entity: Entity, addedEntities: Entity[]) {
+function activate5A(entity_i: number, entities: Entity[]) {
+	const entity = entities[entity_i];
+	const enemy = entities[entity_i === PLAYER1_INDEX ? PLAYER2_INDEX : PLAYER1_INDEX];
 	const newEntity =
 		{type: EntityType.ShotA,
 		 hp: 1, // TODO: Is this the right thing to put here?
@@ -227,10 +230,14 @@ function activate5A(entity: Entity, addedEntities: Entity[]) {
 		 shouldBeRemoved: false};		
 	entity.framesToStateChange = KIDON_SHOT_A_RECOVERY_FRAMES;
 	entity.state = EntityState.Recovery;
-	addedEntities.push(newEntity);
+	entities.push(newEntity);
 }
 
-function activate5B(entity: Entity, addedEntities: Entity[]) {
+function activate5B(entity_i: number, entities: Entity[]) {
+	assert(entity_i === PLAYER1_INDEX || entity_i === PLAYER2_INDEX,
+		   "Weird entity_i");
+	const entity = entities[entity_i];
+	const enemy = entities[entity_i === PLAYER1_INDEX ? PLAYER2_INDEX : PLAYER1_INDEX];
 	const newEntity =
 		{type: EntityType.ShotB,
 		 hp: 999, // TODO: Is this the right thing to put here?
@@ -245,14 +252,15 @@ function activate5B(entity: Entity, addedEntities: Entity[]) {
 		 startupMove: null,
 		 color: entity.color,
 		 shouldBeRemoved: false};
-	entity.vx = 0;
-	entity.vy = 0;
+	// entity.vx = 0;
+	// entity.vy = 0;
 	entity.framesToStateChange = KIDON_SHOT_B_ACTIVE_FRAMES;
 	entity.state = EntityState.Active;
-	addedEntities.push(newEntity);
+	turnToWantedAngle(newEntity, enemy, KIDON_SHOT_B_TURN)
+	entities.push(newEntity);
 }
 
-type ActivationHandler = { (entity: Entity, addedEntities: Entity[]): void; };
+type ActivationHandler = { (entity_i: number, entities: Entity[]): void; };
 const ACTIVATION_HANDLER_MAP = (() => {
 	let map = new Map<Move, ActivationHandler>();
 	map.set(Move._5A, activate5A);
@@ -266,7 +274,8 @@ for (const value1 in Move) {
 		throw new Error("Missing value in ACTIVATION_HANDLER_MAP");
 }
 // TODO: Can we merge handleEntityState with handleEntityMovement?
-function handleEntityState(entity: Entity, addedEntities: Entity[]) {
+function handleEntityState(entity_i: number, entities: Entity[]) {
+	const entity = entities[entity_i];
 	switch (entity.type) {
 		case EntityType.Ship:
 			if (entity.state !== EntityState.Hitstun) {
@@ -291,7 +300,7 @@ function handleEntityState(entity: Entity, addedEntities: Entity[]) {
 					break;
 				case EntityState.Startup:
 					if (--entity.framesToStateChange <= 0) {
-						ACTIVATION_HANDLER_MAP.get(entity.startupMove!)!(entity, addedEntities);
+						ACTIVATION_HANDLER_MAP.get(entity.startupMove!)!(entity_i, entities);
 						entity.startupMove = null;
 					}
 					break;
@@ -312,17 +321,20 @@ function handleEntityState(entity: Entity, addedEntities: Entity[]) {
 	}
 }
 
+function turnToWantedAngle(src: Entity, dest: Entity, maxTurn: number) {
+    const desiredAngle = safeAtan2(dest.y - src.y, dest.x - src.x);
+    const diff = angleDiff(desiredAngle, src.angleInt);    
+    src.angleInt = abs(diff) < maxTurn ? desiredAngle :
+                   diff < 0            ? src.angleInt - maxTurn
+                                       : src.angleInt + maxTurn;
+}
+
 function handleEntityMovement(entity: Entity, player1: Entity, player2: Entity) {
 	switch (entity.type) {
 		case EntityType.ShotA:
 			if (KIDON_SHOT_A_ACTIVE_FRAMES - entity.framesToStateChange < KIDON_SHOT_A_HOMING_FRAMES) {
 				const enemy = entity.collisionSide === CollisionSide.PlayerOne ? player2 : player1;
-				const desiredAngle = safeAtan2(enemy.y - entity.y, enemy.x - entity.x);
-				const diff = angleDiff(desiredAngle, entity.angleInt);
-													   
-				entity.angleInt = abs(diff) < KIDON_SHOT_A_TURN_PER_FRAME ? desiredAngle :
-					diff < 0 ? entity.angleInt - KIDON_SHOT_A_TURN_PER_FRAME
-					         : entity.angleInt + KIDON_SHOT_A_TURN_PER_FRAME;
+				turnToWantedAngle(entity, enemy, KIDON_SHOT_A_TURN_PER_FRAME);
 				entity.vx = safeCosMul(KIDON_SHOT_A_SPEED, entity.angleInt);
 				entity.vy = safeSinMul(KIDON_SHOT_A_SPEED, entity.angleInt);
 			}
@@ -661,7 +673,7 @@ const SHOT_DISAPPEARS_ON_IMPACT_MAP =
 
 function handleShipShotCollision(state: GameState, ship: Entity, shot: Entity) {
 	const angle = shot.angleInt;
-	const isBlocked = (ship.state == EntityState.Idle || ship.state === EntityState.Blockstun) && (shot.color === ship.color || shot.color === EntityColor.Neutral) && false;
+	const isBlocked = (ship.state == EntityState.Idle || ship.state === EntityState.Blockstun) && (shot.color === ship.color || shot.color === EntityColor.Neutral);
 	const accelOnBlock = ACCEL_ON_BLOCK_MAP.get(shot.type)!;
 	const dvx = safeCosMul(isBlocked ? ACCEL_ON_BLOCK_MAP.get(shot.type)! : ACCEL_ON_HIT_MAP.get(shot.type)!, angle);
 	const dvy = safeSinMul(isBlocked ? ACCEL_ON_BLOCK_MAP.get(shot.type)! : ACCEL_ON_HIT_MAP.get(shot.type)!, angle);
@@ -878,12 +890,11 @@ export function updateGameState(state: GameState, inputs: number[], winningSyncD
 	handleEntityKeyboard(state.entities[PLAYER1_INDEX], inputs[0], state.player1InputHistory, state.player1InputHistoryNextIndex);
 	handleEntityKeyboard(state.entities[PLAYER2_INDEX], inputs[1], state.player2InputHistory, state.player2InputHistoryNextIndex);
 
-	let addedEntities: Entity[] = [];
+	// TODO: handleEntityState may add new entities, it might be better to add them all in one go?
 	for (let i = 0, l = state.entities.length; i < l; ++i)
-		handleEntityState(state.entities[i], addedEntities);
+		handleEntityState(i, state.entities);
 
 	updateInputHistory(state, inputs);
-	for (let i = 0, l = addedEntities.length; i < l; ++i) state.entities.push(addedEntities[i]);
 	removeEntities(state);
 
 	if (state.entities[PLAYER1_INDEX].hp <= 0) {
