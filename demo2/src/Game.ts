@@ -352,11 +352,15 @@ class Game {
 			var ctx = this.audioContext;
 			if (this.oscillator != null) {
 				this.oscillator.stop(0);
-				this.oscillator.disconnect(ctx.destination);
+				try {
+					this.oscillator.disconnect(ctx.destination);
+				} catch (error) {}
 				this.oscillator = null;
 			}
 			if (this.gain != null) {
-				this.gain.disconnect(ctx.destination);
+				try {
+					this.gain.disconnect(ctx.destination);
+				} catch (error) {}
 				this.gain = null;
 			}
 			var o = this.oscillator = ctx.createOscillator();

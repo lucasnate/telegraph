@@ -7,7 +7,11 @@ import Peer, { DataConnection } from 'peerjs';
 import { setMinFakeLag, setMaxFakeLag, setFakePacketLoss } from '../../src/network/PeerJSSocket';
 import { updateUrlForFriend, onMinFakeLagInput, onMaxFakeLagInput, onFakePacketLossInput, onDelayInput, onRollbackInput, onReset, onCopy, onOpen, onKeyIntervalInput, onDistanceInput, onMoveTypeChange, updateRange, showOnlineStuff } from './renderPage';
 
-const peer = new Peer();
+const peer = new Peer({
+     secure:true,
+     host: 'makot-bakhalal.herokuapp.com',
+     port: 443
+});
 let peerId = new URL(window.location.href).searchParams.get('peer');
 let playerNum = 1;
 
