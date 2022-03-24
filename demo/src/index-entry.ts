@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { createGame } from './Game';
-import Peer, { DataConnection } from 'peerjs';
+import { Peer } from '../../peerjs/lib/peer';
+import { DataConnection } from '../../peerjs/lib/dataconnection';
 import {
   updatePeerId,
   hideConnectInfo,
@@ -50,7 +51,7 @@ function connectToPeer(): void {
   }
   const conn = peer.connect(peerId);
   playerNum = 2;
-  registerConnection(conn);
+  registerConnection(conn!);
 }
 
 onConnectButtonClick(connectToPeer);

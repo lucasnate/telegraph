@@ -1,5 +1,5 @@
 import * as t from 'io-ts';
-import Peer from 'peerjs';
+import { Peer } from '../peerjs/lib/peer';
 import { TelegraphEvent } from './events';
 
 export const savedChecksumC = t.type({

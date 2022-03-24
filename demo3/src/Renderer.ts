@@ -1,5 +1,5 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
-import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp, WinScreen } from './GameState';
+import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp, getMaxBatt, WinScreen } from './GameState';
 import { MAX_INT_ANGLE, max, min } from './safeCalc';
 import { KIDON_TRIANGLES, KIDON_SHOT_A_TRIANGLES, KIDON_SHOT_B_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
 
@@ -240,7 +240,7 @@ function textMetricsHeight(metrics: TextMetrics): number {
 	return metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
 }
 
-const Hp = '♥';
+const HP = '♥';
 const BATT = '⚛';
 const WARP = '✥';
 const BAR_COUNT = 3;
@@ -249,7 +249,13 @@ const BAR_VSEP_RATIO = 1;
 const TITLE_VSEP_RATIO = 1;
 const TITLE_RATIO = 0.5;
 const COMBO_HITS_RATIO = 0.25;
-const MAX_HP_GLOW_FRAMES = 16;
+const MAX_GLOW_FRAMES = 16;
+
+export enum BarType {
+	HP,
+	BATT,
+	WARP
+}
 
 export class Renderer {
 	readonly gl: WebGLRenderingContext;
@@ -279,10 +285,12 @@ export class Renderer {
 	battWidth: number = 0;
 	warpWidth: number = 0;
 
-	lastPlayer1Hp: number = 0;
-	lastPlayer2Hp: number = 0;
-	player1HpGlowFrames: number = 0;
-	player2HpGlowFrames: number = 0;
+	barGlowFrames: number[] = new Array(256).fill(0);
+	barLastValue: number[] = new Array(256).fill(0);
+	// lastPlayer1Hp: number = 0;
+	// lastPlayer2Hp: number = 0;
+	// player1HpGlowFrames: number = 0;
+	// player2HpGlowFrames: number = 0;
 	
 	constructor() {
 		this.gl = (document.getElementById('glCanvas') as HTMLCanvasElement).getContext("webgl")!;
@@ -548,12 +556,12 @@ export class Renderer {
 								   this.getBestFontSize('Win', canvas.width)),
 							   this.getBestFontSize('Draw', canvas.width));
 		this.comboFontSize = this.getBestFontSize('000 hits', canvas.width * COMBO_HITS_RATIO);
-		this.hpFontSize = this.getBestFontSize(Hp, this.barWidth);
+		this.hpFontSize = this.getBestFontSize(HP, this.barWidth);
 		this.battFontSize = this.getBestFontSize(BATT, this.barWidth);
 		this.warpFontSize = this.getBestFontSize(WARP, this.barWidth);
 		this.barSymbolHeight = 0;
 		ctx.font = this.hpFontSize.toString() + 'px monospace';
-		let hpMeasure = ctx.measureText(Hp);
+		let hpMeasure = ctx.measureText(HP);
 		this.barSymbolHeight = Math.max(textMetricsHeight(hpMeasure), this.barSymbolHeight);
 		ctx.font = this.battFontSize.toString() + 'px monospace';
 		let battMeasure = ctx.measureText(BATT);
@@ -574,6 +582,63 @@ export class Renderer {
 		this.lastPlayerCanvasHeight = canvas.height;
 	}
 
+	handleBarRendering(barType: BarType, isPlayer2: boolean, entity: Entity) {
+		const BAR_TYPE_COUNT = 3;
+
+		const ctx = isPlayer2 ? this.player2 : this.player1;
+		const canvas = isPlayer2 ? this.player2Canvas : this.player1Canvas;
+		const barTop = max(this.titleHeight, this.comboHeight) * (1 + TITLE_VSEP_RATIO);
+		const barBottom = canvas.height - (1 + BAR_VSEP_RATIO) * this.barSymbolHeight;
+		const barOffset = (isPlayer2 ? BAR_TYPE_COUNT : 0) + barType;
+
+		if (this.barGlowFrames[barOffset] > 0) {
+			--this.barGlowFrames[barOffset];
+		}
+		const curValue = barType === BarType.HP ? entity.hp : barType === BarType.BATT ? entity.batt : 100;
+		const maxValue = barType === BarType.HP ? getMaxHp(entity.type) : barType === BarType.BATT ? getMaxBatt(entity.type) : 100;
+		if (this.barLastValue[barOffset] != curValue &&
+			!(barType === BarType.BATT && curValue > this.barLastValue[barOffset])) {
+			this.barGlowFrames[barOffset] = MAX_GLOW_FRAMES;
+		}
+		this.barLastValue[barOffset] = curValue;
+
+		switch (barType) {
+			case BarType.HP:
+				ctx.fillStyle = ('rgb(' +
+					'0' +
+					',' +
+					(128 + Math.floor(127 * this.barGlowFrames[barOffset] / MAX_GLOW_FRAMES)).toString() +
+					',' +
+					'0' + 
+					')');
+				break;
+			case BarType.BATT:
+				ctx.fillStyle = ('rgb(' +
+					(194 + Math.floor(36 * this.barGlowFrames[barOffset] / MAX_GLOW_FRAMES)).toString() +
+					',' +
+					(126 + Math.floor(28 * this.barGlowFrames[barOffset] / MAX_GLOW_FRAMES)).toString() +
+					',' +
+					'0' +
+					')');
+				break;
+			case BarType.WARP:
+				ctx.fillStyle = ('rgb(' +
+					'0' +
+					',' +
+					(128 + Math.floor(127 * this.barGlowFrames[barOffset] / MAX_GLOW_FRAMES)).toString() +
+					',' +
+					(128 + Math.floor(127 * this.barGlowFrames[barOffset] / MAX_GLOW_FRAMES)).toString() + 
+					')');
+				break;
+			default:
+				throw new Error("Unknown BarType");
+		}
+		ctx.fillRect(this.barWidth * barType * (BAR_HSEP_RATIO + 1),
+					 barTop + (barBottom - barTop) * (maxValue - curValue) / maxValue,
+					 this.barWidth,
+					 (barBottom - barTop) * curValue / maxValue);
+	}
+	
 	renderSinglePlayerCanvas(state: GameState, isPlayer2: boolean, localPlayerHandle: number) {
 		if (localPlayerHandle !== 1 && localPlayerHandle !== 2) {
 			throw new Error("unexpected localPlayerHandle in renderSinglePlayerCanvas");
@@ -582,14 +647,9 @@ export class Renderer {
 		const ctx = isPlayer2 ? this.player2 : this.player1;
 		const canvas = isPlayer2 ? this.player2Canvas : this.player1Canvas;
 		const width = canvas.width, height = canvas.height;
-		const barWidth = width / (BAR_COUNT + (BAR_COUNT - 1) * BAR_HSEP_RATIO);
-		const barTop = max(this.titleHeight, this.comboHeight) * (1 + TITLE_VSEP_RATIO);
-		const barBottom = height - (1 + BAR_VSEP_RATIO) * this.barSymbolHeight;
 		const entity = state.entities[isPlayer2 ? PLAYER2_INDEX : PLAYER1_INDEX];
 		const maxHp = getMaxHp(entity.type);
 		const hp = entity.hp;
-		let lastHp = isPlayer2 ? this.lastPlayer2Hp : this.lastPlayer1Hp;
-		// const hpBarColor = getEntityColor(state.entities[isPlayer2 ? PLAYER2_INDEX : PLAYER1_INDEX]);
 		ctx.font = this.titleFontSize.toString() + 'px monospace';
 		ctx.fillStyle = 'black';
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -618,31 +678,14 @@ export class Renderer {
 			ctx.fillText(this.fpsDisplayValue.toString(), 0, canvas.height);
 		}
 		ctx.font = this.hpFontSize.toString() + 'px monospace';
-		ctx.fillText(Hp, barWidth / 2 - this.hpWidth / 2, height);
+		ctx.fillText(HP, this.barWidth / 2 - this.hpWidth / 2, height);
 		ctx.font = this.battFontSize.toString() + 'px monospace';
-		ctx.fillText(BATT, barWidth * (1 + BAR_HSEP_RATIO) + barWidth / 2 - this.battWidth / 2, height);
+		ctx.fillText(BATT, this.barWidth * (1 + BAR_HSEP_RATIO) + this.barWidth / 2 - this.battWidth / 2, height);
 		ctx.font = this.warpFontSize.toString() + 'px monospace';
-		ctx.fillText(WARP, barWidth * (2 + 2 * BAR_HSEP_RATIO) + barWidth / 2 - this.warpWidth / 2, height);
-		if (this.player1HpGlowFrames > 0) --this.player1HpGlowFrames;
-		if (this.player2HpGlowFrames > 0) --this.player2HpGlowFrames;
-		if (hp !== lastHp) {
-			if (isPlayer2) {
-				this.player2HpGlowFrames = MAX_HP_GLOW_FRAMES;
-				this.lastPlayer2Hp = hp;
-			} else {
-				this.player1HpGlowFrames = MAX_HP_GLOW_FRAMES;
-				this.lastPlayer1Hp = hp;
-			}
-		}
-		if ((isPlayer2 ? this.player2HpGlowFrames : this.player1HpGlowFrames) > 0) {
-			console.log((isPlayer2 ? this.player2HpGlowFrames : this.player1HpGlowFrames));
-		}
-		ctx.fillStyle = 'rgb(0,' + (128 + Math.floor(127 * (isPlayer2 ? this.player2HpGlowFrames : this.player1HpGlowFrames) / MAX_HP_GLOW_FRAMES)).toString() + ',0)';
-		ctx.fillRect(0, barTop + (barBottom - barTop) * (maxHp - entity.hp) / maxHp, barWidth, (barBottom - barTop) * entity.hp / maxHp);
-		ctx.fillStyle = 'rgb(194,126,0)';
-		ctx.fillRect(barWidth * (BAR_HSEP_RATIO + 1), barTop, barWidth, barBottom - barTop);
-		ctx.fillStyle = 'rgb(0,128,128)';
-		ctx.fillRect(barWidth * 2 * (BAR_HSEP_RATIO + 1), barTop, barWidth, barBottom - barTop);		
+		ctx.fillText(WARP, this.barWidth * (2 + 2 * BAR_HSEP_RATIO) + this.barWidth / 2 - this.warpWidth / 2, height);
+		this.handleBarRendering(BarType.HP, isPlayer2, entity);
+		this.handleBarRendering(BarType.BATT, isPlayer2, entity);
+		this.handleBarRendering(BarType.WARP, isPlayer2, entity);	
 	}
 		
 	renderPlayerCanvas(state: GameState, localPlayerHandle: number) {

@@ -3,28 +3,28 @@
 import { SyncData, InputValues } from '../../src/types';
 import { RingBuffer } from '../../src/util/RingBuffer';
 import { safeDiv, safeSqrt, MAX_INT_ANGLE, safeCosMul, safeSinMul, safeAtan2, abs, angleDiff, normalizeAngle, min, max } from './safeCalc';
-import { abstractKeyUpMask, abstractKeyLeftMask, abstractKeyRightMask, abstractKeyDownMask, abstractKeySwitchMask, abstractKeyAMask, abstractKeyBMask } from './Inputter';
+import { abstractKeyUpMask, abstractKeyLeftMask, abstractKeyRightMask, abstractKeyDownMask, abstractKeyRedMask, abstractKeyBlueMask, abstractKeyAMask, abstractKeyBMask } from './Inputter';
 
 import { KIDON_WIDTH, KIDON_HEIGHT, KIDON_SHOT_A_WIDTH, KIDON_TRIANGLES, KIDON_SHOT_A_TRIANGLES, KIDON_SHOT_B_TRIANGLES, KIDON_COARSE_RADIUS, KIDON_SHOT_A_COARSE_RADIUS, KIDON_SHOT_B_COARSE_RADIUS } from './shipShapes';
 import { Point, rotateAndTranslate } from './spatial';
 import { assert } from '../../src/util/assert';
 
+// TODO: Weapon 8B
 // TODO: Most important before everything, a constant silent sound.
-// TODO: Should have two different buttons for color switch
-// TODO: Battery
 // TODO: Weapon 2A
 // TODO: Shift
 // TODO: Weapon Shift-A
-// TODO: Weapon B
 // TODO: At some point we should get rid of many of our maps and have a type representing the
 //       entity type. Something like a prototype :)
 // TODO: Add an assert that *_FRAMES are not negative.
+// TODO: Allow controlling net connection params
 
 
 // TODO: Need to get these things through syncData
 export const WORLD_WIDTH = 100000;
 export const WORLD_HEIGHT = 100000;
 export const KIDON_MAX_HP = 10000;
+export const KIDON_MAX_BATT = 60 * 20;
 export const KIDON_MAX_SPEED = safeDiv(KIDON_HEIGHT, 10);
 export const KIDON_FULL_ACCEL_FRAMES = 20;
 export const KIDON_ACCEL = safeDiv(KIDON_MAX_SPEED, KIDON_FULL_ACCEL_FRAMES);
@@ -37,7 +37,9 @@ export const KIDON_SHOT_A_RECOVERY_FRAMES = 4;
 export const KIDON_SHOT_A_ADVANTAGE_ON_HIT = 13;
 export const KIDON_SHOT_A_ADVANTAGE_ON_BLOCK = -1;
 export const KIDON_SHOT_A_HITSTUN_FRAMES = KIDON_SHOT_A_RECOVERY_FRAMES + KIDON_SHOT_A_ADVANTAGE_ON_HIT;
+assert(KIDON_SHOT_A_HITSTUN_FRAMES >= 0, "Negative frames");
 export const KIDON_SHOT_A_BLOCKSTUN_FRAMES = KIDON_SHOT_A_RECOVERY_FRAMES + KIDON_SHOT_A_ADVANTAGE_ON_BLOCK;
+assert(KIDON_SHOT_A_BLOCKSTUN_FRAMES >= 0, "Negative frames");
 export const KIDON_SHOT_A_RANGE = KIDON_WIDTH * 4;
 export const KIDON_SHOT_A_SPEED = safeDiv(KIDON_SHOT_A_RANGE, KIDON_SHOT_A_ACTIVE_FRAMES);
 assert(KIDON_SHOT_A_SPEED < safeDiv(KIDON_SHOT_A_WIDTH, 2), "Kidon shot A is too fast! " + KIDON_SHOT_A_SPEED + "," + KIDON_SHOT_A_WIDTH);
@@ -58,10 +60,14 @@ export const KIDON_SHOT_B_ACCEL_ON_BLOCK = safeDiv(KIDON_MAX_SPEED, 16);
 export const KIDON_SHOT_B_ADVANTAGE_ON_HIT = 18;
 export const KIDON_SHOT_B_ADVANTAGE_ON_BLOCK = -10;
 export const KIDON_SHOT_B_HITSTUN_FRAMES = KIDON_SHOT_B_ACTIVE_FRAMES + KIDON_SHOT_B_RECOVERY_FRAMES + KIDON_SHOT_B_ADVANTAGE_ON_HIT;
+assert(KIDON_SHOT_B_HITSTUN_FRAMES >= 0, "Negative frames");
 export const KIDON_SHOT_B_BLOCKSTUN_FRAMES = KIDON_SHOT_B_ACTIVE_FRAMES + KIDON_SHOT_B_RECOVERY_FRAMES + KIDON_SHOT_B_ADVANTAGE_ON_BLOCK;
+assert(KIDON_SHOT_B_BLOCKSTUN_FRAMES >= 0, "Negative frames");
 export const KIDON_SHOT_B_BLOCKED_DAMAGE = 90;
 export const KIDON_SHOT_B_HIT_DAMAGE = 900;
 export const KIDON_SHOT_B_TURN = safeDiv(MAX_INT_ANGLE, 32);
+
+const WALL_DAMAGE = 100;
 
 const WIN_SCREEN_FRAMES = 300;
 
@@ -87,6 +93,12 @@ export enum EntityType {
 	ShotB
 }
 
+enum Move {
+	_5A,
+	_5B,
+	_8B,
+}
+
 enum CollisionSide {
 	PlayerOne,
 	PlayerTwo,
@@ -110,6 +122,7 @@ export enum EntityColor {
 export interface Entity {
 	type: EntityType,
 	hp: number,
+	batt: number,
 	x: number,
 	y: number,
 	vx: number,
@@ -149,19 +162,85 @@ function norm2sq(x: number,y: number): number {
 	return x*x + y*y;
 }
 
+type MoveInputChecker = { (move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean; }
+
+interface MoveActivationInfo {
+	startupFrames: number,
+	battCost: number,
+	inputChecker: MoveInputChecker 
+}
+
+function isDoing5A(move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
+	const lastInput = getLastInput(inputHistory, inputHistoryNextIndex);
+	return (input & abstractKeyAMask) && !(lastInput & abstractKeyAMask) ? true : false;
+}
+
+function isDoing5B(move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
+	const lastInput = getLastInput(inputHistory, inputHistoryNextIndex);
+	return (input & abstractKeyBMask) && !(lastInput & abstractKeyBMask) ? true : false;
+}
+
+function isDoing8B(move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
+	return isDoing5B(move, input, inputHistory, inputHistoryNextIndex) && (input & abstractKeyUpMask) ? true : false;
+}
+
+const MOVE_INFO_MAP = new Map<Move, MoveActivationInfo>(
+	[[Move._5A, {startupFrames: KIDON_SHOT_A_STARTUP_FRAMES,
+				 battCost: KIDON_SHOT_A_STARTUP_FRAMES + KIDON_SHOT_A_RECOVERY_FRAMES,
+				 inputChecker: isDoing5A}],
+	 [Move._5B, {startupFrames: KIDON_SHOT_B_STARTUP_FRAMES,
+				 battCost: (KIDON_SHOT_B_STARTUP_FRAMES +
+					        KIDON_SHOT_B_ACTIVE_FRAMES +
+             		        KIDON_SHOT_B_RECOVERY_FRAMES) * 2,
+				 inputChecker: isDoing5B}],
+	 [Move._8B, {startupFrames: 9999,
+				 battCost: 0,
+				 inputChecker: isDoing8B}]]);
+
+for (const value1 in MOVE_INFO_MAP) {
+	const value1Num = Number(value1);
+	if (isNaN(value1Num)) continue;
+	if (MOVE_INFO_MAP.get(value1Num) === null)
+		throw new Error("Missing value in MOVE_INFO_MAP");
+}
+
+
+function tryActivateWeapon(entity: Entity, move: Move, info: MoveActivationInfo) {
+	if (entity.batt < info.battCost)
+		return false;
+
+	entity.batt -= info.battCost;
+	entity.state = EntityState.Startup;
+	entity.startupMove = move;
+	entity.framesToStateChange = info.startupFrames;
+	return true;
+}
+
+function getLastInput(inputHistory: number[], inputHistoryNextIndex: number) {
+	return inputHistory[inputHistoryNextIndex - 1 < 0 ? (inputHistory.length - 1) : inputHistoryNextIndex - 1];
+}
+
+
+const AVAILABLE_MOVES = [Move._8B, Move._5B, Move._5A];
+function tryActivateAnyWeapon(entity: Entity, input: number, inputHistory: number[], inputHistoryNextIndex: number) {
+	for (var i = 0, l = AVAILABLE_MOVES.length; i < l; ++i) {
+		const move = AVAILABLE_MOVES[i];
+		const moveInfo = MOVE_INFO_MAP.get(move)!;
+		if (moveInfo.inputChecker(move, input, inputHistory, inputHistoryNextIndex))
+			if (tryActivateWeapon(entity, move, moveInfo))
+				return;
+	}
+}
+
 function handleEntityKeyboard(entity: Entity, input: number, inputHistory: number[], inputHistoryNextIndex: number) {
 	const stun = entity.state === EntityState.Hitstun || entity.state === EntityState.Blockstun || entity.state === EntityState.Active;
 	const usingWeapon = entity.state === EntityState.Startup || entity.state === EntityState.Active || entity.state === EntityState.Recovery;
-	const lastInput = inputHistory[inputHistoryNextIndex - 1 < 0 ? (inputHistory.length - 1) : inputHistoryNextIndex - 1];
-	if ((input & abstractKeyAMask) && !(lastInput & abstractKeyAMask) && !stun && !usingWeapon) {
-		entity.state = EntityState.Startup;
-		entity.startupMove = Move._5A;
-		entity.framesToStateChange = KIDON_SHOT_A_STARTUP_FRAMES;
-	} else if ((input & abstractKeyBMask) && !(lastInput & abstractKeyBMask) && !stun && !usingWeapon) {
-		entity.state = EntityState.Startup;
-		entity.startupMove = Move._5B;
-		entity.framesToStateChange = KIDON_SHOT_B_STARTUP_FRAMES;		
-	} else if ((input & abstractKeyUpMask) && !stun) {
+	const lastInput = getLastInput(inputHistory, inputHistoryNextIndex);
+
+	if (!stun && !usingWeapon)
+		tryActivateAnyWeapon(entity, input, inputHistory, inputHistoryNextIndex);
+
+	if ((input & abstractKeyUpMask) && !stun) {
 		const newVx = entity.vx + safeCosMul(KIDON_ACCEL, entity.angleInt);
 		const newVy = entity.vy + safeSinMul(KIDON_ACCEL, entity.angleInt);
 		const newNormSq = norm2sq(newVx, newVy);
@@ -199,16 +278,14 @@ function handleEntityKeyboard(entity: Entity, input: number, inputHistory: numbe
 		entity.angleInt = normalizeAngle(entity.angleInt - KIDON_TURN_PER_FRAME);
 	}
 		
-	if ((input & abstractKeySwitchMask) && !(lastInput & abstractKeySwitchMask) && !usingWeapon) {
-		console.log({input: input, lastInput: lastInput, inputHistory: inputHistory, inputHistoryNextIndex: inputHistoryNextIndex});
-		entity.color = entity.color === EntityColor.Red ? EntityColor.Blue : EntityColor.Red;
+	if ((input & abstractKeyBlueMask) && !(lastInput & abstractKeyBlueMask) && !usingWeapon) {
+		entity.color = EntityColor.Blue;
 	}
 
-}
+	if ((input & abstractKeyRedMask) && !(lastInput & abstractKeyRedMask) && !usingWeapon) {
+		entity.color = EntityColor.Red;
+	}
 
-enum Move {
-	_5A,
-	_5B
 }
 
 function activate5A(entity_i: number, entities: Entity[]) {
@@ -217,6 +294,7 @@ function activate5A(entity_i: number, entities: Entity[]) {
 	const newEntity =
 		{type: EntityType.ShotA,
 		 hp: 1, // TODO: Is this the right thing to put here?
+		 batt: 1, // TODO: Is this the right thing to put here?
 		 x: entity.x + safeCosMul(safeDiv(KIDON_HEIGHT, 2), entity.angleInt),
 		 y: entity.y + safeSinMul(safeDiv(KIDON_HEIGHT, 2), entity.angleInt),
 		 vx: safeCosMul(KIDON_SHOT_A_SPEED, entity.angleInt),
@@ -241,6 +319,7 @@ function activate5B(entity_i: number, entities: Entity[]) {
 	const newEntity =
 		{type: EntityType.ShotB,
 		 hp: 999, // TODO: Is this the right thing to put here?
+		 batt: 999, // TODO: Is this the right thing to put here?
 		 x: entity.x + safeCosMul(safeDiv(KIDON_HEIGHT, 2), entity.angleInt),
 		 y: entity.y + safeSinMul(safeDiv(KIDON_HEIGHT, 2), entity.angleInt),
 		 vx: 0,
@@ -260,11 +339,16 @@ function activate5B(entity_i: number, entities: Entity[]) {
 	entities.push(newEntity);
 }
 
+function activate8B(entity_i: number, entities: Entity[]) {
+	assert(false, "I don't really exist yet");
+}
+
 type ActivationHandler = { (entity_i: number, entities: Entity[]): void; };
 const ACTIVATION_HANDLER_MAP = (() => {
 	let map = new Map<Move, ActivationHandler>();
 	map.set(Move._5A, activate5A);
 	map.set(Move._5B, activate5B);
+	map.set(Move._8B, activate8B);
 	return map;
 })();
 for (const value1 in Move) {
@@ -313,6 +397,9 @@ function handleEntityState(entity_i: number, entities: Entity[]) {
 				default:
 					throw new Error("Unsupported state");
 			}
+			++entity.batt;
+			if (entity.batt > KIDON_MAX_BATT)
+				entity.batt = KIDON_MAX_BATT;
 			break;
 		case EntityType.ShotA:
 		case EntityType.ShotB:
@@ -409,6 +496,8 @@ function handleWallCollisions(entity: Entity, wci: WallCollisionInfo) {
 				entity.vy = -entity.vy;
 				entity.y -= wci.excessPositiveY;
 			}
+			if (entity.state !== EntityState.Hitstun && entity.state !== EntityState.Blockstun)
+				entity.hp -= WALL_DAMAGE;
 			break;
 		case EntityType.ShotA:
 		case EntityType.ShotB:
@@ -784,6 +873,7 @@ function handleCollisions(entity_i: number, state: GameState) {
 function initialEntities() {
 	return [{type: EntityType.Ship,
 			 hp: KIDON_MAX_HP,
+			 batt: 0,
 			 x: PLAYER1_START_X,
 			 y: PLAYER1_START_Y,
 			 vx: 0,
@@ -797,6 +887,7 @@ function initialEntities() {
 			 shouldBeRemoved: false},
 			{type: EntityType.Ship,
 			 hp: KIDON_MAX_HP,
+			 batt: 0,
 			 x: PLAYER2_START_X,
 			 y: PLAYER2_START_Y,
 			 vx: 0,
@@ -866,6 +957,12 @@ export function getMaxHp(type: EntityType) {
 	if (type === EntityType.Ship)
 		return KIDON_MAX_HP;
 	throw new Error("getMaxHp for unknown");
+}
+
+export function getMaxBatt(type: EntityType) {
+	if (type === EntityType.Ship)
+		return KIDON_MAX_BATT;
+	throw new Error("getMaxBatt for unknown");
 }
 
 export function updateGameState(state: GameState, inputs: number[], winningSyncData: GameSyncData): void {

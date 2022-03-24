@@ -1,4 +1,5 @@
-import Peer, { DataConnection } from 'peerjs';
+import { Peer } from '../../peerjs/lib/peer';
+import { DataConnection } from '../../peerjs/lib/dataconnection';
 import { assert } from '../util/assert';
 import { parseTelegraphMessage, TelegraphMessage } from './messages';
 import { log } from '../log';
@@ -48,7 +49,7 @@ export class PeerJSSocket {
   registerConnection = (conn: DataConnection): void => {
     this.connections[conn.peer] = conn;
 
-    conn.serialization = 'json';
+	assert(conn.serialization == 'json', "Must use JSON serialization");
 
     conn.on('close', () => {
       console.log(`closed connection with peer ${conn.peer}`);
@@ -66,7 +67,7 @@ export class PeerJSSocket {
   };
 
 	getPeerId(): string {
-		return this.peer.id;
+		return this.peer.id!;
 	}
 	
   sendTo(peerId: string, message: TelegraphMessage): void {

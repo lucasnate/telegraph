@@ -1,4 +1,4 @@
-import Peer from 'peerjs';
+import { Peer } from '../../peerjs/lib/peer';
 import {
     Telegraph,
     TelegraphEvent,

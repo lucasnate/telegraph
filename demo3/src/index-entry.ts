@@ -1,8 +1,10 @@
 import { createGame } from './Game';
-import Peer, { DataConnection } from 'peerjs';
+import { Peer } from '../../peerjs/lib/peer';
+import { DataConnection } from '../../peerjs/lib/dataconnection';
+import { LogLevel } from "../../peerjs/lib/logger";
 import {updateUrlForFriend, onCopy, onOpen, showCanvas} from './renderPage';
 
-const peer = new Peer();
+const peer = new Peer('dummyid', {debug: LogLevel.All});
 let peerId = new URL(window.location.href).searchParams.get('peer');
 let playerNum = 1;
 let startTime = 0; // For state rank calculation, wlll be updated before createGame
@@ -23,14 +25,14 @@ if (peerId == null) {
 	peer.on('connection', (conn) => { registerConnection(conn); });
 } else {
 	playerNum = 2;
-	peer.on('open', (ignored_id) => {
+	// peer.on('open', (ignored_id) => {
 		if (peerId == null) throw new Error('somehow peerId became null');
-		document.getElementById('server_prompt')!.remove();
+	    document.getElementById('server_prompt')!.style.display = 'none';
 		console.log("Connecting to " + peerId);
 		let conn = peer.connect(peerId);
 		console.log(conn);
-		registerConnection(conn);
-	});
+		registerConnection(conn!);
+	// });
 }
 
 function registerConnection(conn: DataConnection) {

@@ -3,7 +3,8 @@
 
 
 import { createGame, resetGame, GameSyncData } from './Game';
-import Peer, { DataConnection } from 'peerjs';
+import { Peer } from '../../peerjs/lib/peer';
+import { DataConnection } from '../../peerjs/lib/dataconnection';
 import { setMinFakeLag, setMaxFakeLag, setFakePacketLoss } from '../../src/network/PeerJSSocket';
 import { updateUrlForFriend, onMinFakeLagInput, onMaxFakeLagInput, onFakePacketLossInput, onDelayInput, onRollbackInput, onReset, onCopy, onOpen, onKeyIntervalInput, onDistanceInput, onMoveTypeChange, updateRange, showOnlineStuff } from './renderPage';
 
@@ -37,7 +38,7 @@ if (peerId == null) {
 		console.log("Connecting to " + peerId);
 		let conn = peer.connect(peerId);
 		console.log(conn);
-		registerConnection(conn);
+		registerConnection(conn!);
 	});
 }
 

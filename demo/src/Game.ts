@@ -2,7 +2,7 @@
 // TODO: Out-of-order packets crash this thing!
 // TODO: How do we handle packet loss?
 
-import Peer from 'peerjs';
+import { Peer } from '../../peerjs/lib/peer';
 import {
     Telegraph,
     TelegraphEvent,
