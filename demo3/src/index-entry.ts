@@ -2,7 +2,11 @@ import { createGame } from './Game';
 import Peer, { DataConnection } from 'peerjs';
 import {updateUrlForFriend, onCopy, onOpen, showCanvas} from './renderPage';
 
-const peer = new Peer();
+const peer = new Peer({
+     secure:true,
+     host: 'makot-bakhalal.herokuapp.com',
+     port: 443
+});
 let peerId = new URL(window.location.href).searchParams.get('peer');
 let playerNum = 1;
 let startTime = 0; // For state rank calculation, wlll be updated before createGame
