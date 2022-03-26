@@ -1,7 +1,7 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp, getMaxBatt, WinScreen, assertDefinedForAllEnum } from './GameState';
 import { MAX_INT_ANGLE, max, min } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_SHOT_A_TRIANGLES, KIDON_SHOT_2A_TRIANGLES, KIDON_SHOT_B_TRIANGLES, KIDON_SHOT_8B_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
+import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
 
 // Vertex shader program
 const VERTEX_SHADER_SOURCE = `
@@ -218,10 +218,10 @@ function getShotColor(entity: Entity) {
 const ENTITY_COLOR_HANDLER_MAP = (() => {
 	let map = new Map<EntityType, EntityColorHandler>();
 	map.set(EntityType.Ship, getShipColor);
-	map.set(EntityType.ShotA, getShotColor);
-	map.set(EntityType.Shot2A, getShotColor);
-	map.set(EntityType.ShotB, getShotColor);
-	map.set(EntityType.Shot8B, getShotColor);
+	map.set(EntityType.ShotA1, getShotColor);
+	map.set(EntityType.ShotA2, getShotColor);
+	map.set(EntityType.ShotB1, getShotColor);
+	map.set(EntityType.ShotB2, getShotColor);
 	return map;
 })();
 assertDefinedForAllEnum(ENTITY_COLOR_HANDLER_MAP, EntityType);
@@ -368,10 +368,10 @@ export class Renderer {
 
 	createBuffers() {
 		let map = new Map([[EntityType.Ship, this.bufferWithCount(KIDON_TRIANGLES)],
-						   [EntityType.ShotA, this.bufferWithCount(KIDON_SHOT_A_TRIANGLES)],
-						   [EntityType.Shot2A, this.bufferWithCount(KIDON_SHOT_2A_TRIANGLES)],
-						   [EntityType.ShotB, this.bufferWithCount(KIDON_SHOT_B_TRIANGLES)],
-						   [EntityType.Shot8B, this.bufferWithCount(KIDON_SHOT_8B_TRIANGLES)]]);
+						   [EntityType.ShotA1, this.bufferWithCount(KIDON_SHOT_A1_TRIANGLES)],
+						   [EntityType.ShotA2, this.bufferWithCount(KIDON_SHOT_A2_TRIANGLES)],
+						   [EntityType.ShotB1, this.bufferWithCount(KIDON_SHOT_B1_TRIANGLES)],
+						   [EntityType.ShotB2, this.bufferWithCount(KIDON_SHOT_B2_TRIANGLES)]]);
 		assertDefinedForAllEnum(map, EntityType);
 
 		return {

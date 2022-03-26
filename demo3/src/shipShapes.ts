@@ -58,15 +58,15 @@ function makeKidonShotTriangles(width: number, height: number) {
 	];
 }
 
-export const KIDON_SHOT_A_WIDTH = safeDiv(KIDON_WIDTH, 2)
-export const KIDON_SHOT_A_HEIGHT = safeDiv(KIDON_HEIGHT, 4)
-export const KIDON_SHOT_A_TRIANGLES = makeKidonShotTriangles(KIDON_SHOT_A_WIDTH, KIDON_SHOT_A_HEIGHT);
-export const KIDON_SHOT_A_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_A_TRIANGLES);
+export const KIDON_SHOT_A1_WIDTH = safeDiv(KIDON_WIDTH, 2)
+export const KIDON_SHOT_A1_HEIGHT = safeDiv(KIDON_HEIGHT, 4)
+export const KIDON_SHOT_A1_TRIANGLES = makeKidonShotTriangles(KIDON_SHOT_A1_WIDTH, KIDON_SHOT_A1_HEIGHT);
+export const KIDON_SHOT_A1_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_A1_TRIANGLES);
 
-export const KIDON_SHOT_2A_WIDTH = safeDiv(KIDON_WIDTH, 2)
-export const KIDON_SHOT_2A_HEIGHT = safeDiv(KIDON_HEIGHT, 4)
-export const KIDON_SHOT_2A_TRIANGLES = makeKidonShotTriangles(KIDON_SHOT_2A_WIDTH, KIDON_SHOT_2A_HEIGHT);
-export const KIDON_SHOT_2A_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_2A_TRIANGLES);
+export const KIDON_SHOT_A2_WIDTH = safeDiv(KIDON_WIDTH, 2)
+export const KIDON_SHOT_A2_HEIGHT = safeDiv(KIDON_HEIGHT, 4)
+export const KIDON_SHOT_A2_TRIANGLES = makeKidonShotTriangles(KIDON_SHOT_A2_WIDTH, KIDON_SHOT_A2_HEIGHT);
+export const KIDON_SHOT_A2_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_A2_TRIANGLES);
 
 function makeLaserTriangles(width: number, height: number) {
 	return [
@@ -79,13 +79,13 @@ function makeLaserTriangles(width: number, height: number) {
 	];
 }
 
-export const KIDON_SHOT_B_WIDTH = KIDON_WIDTH * 8;
-export const KIDON_SHOT_B_HEIGHT = safeDiv(KIDON_HEIGHT, 4);
-export const KIDON_SHOT_B_TRIANGLES = makeLaserTriangles(KIDON_SHOT_B_WIDTH, KIDON_SHOT_B_HEIGHT);
-export const KIDON_SHOT_B_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_B_TRIANGLES);
+export const KIDON_SHOT_B2_WIDTH = KIDON_WIDTH * 8;
+export const KIDON_SHOT_B2_HEIGHT = safeDiv(KIDON_HEIGHT, 4);
+export const KIDON_SHOT_B2_TRIANGLES = makeLaserTriangles(KIDON_SHOT_B2_WIDTH, KIDON_SHOT_B2_HEIGHT);
+export const KIDON_SHOT_B2_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_B2_TRIANGLES);
 
-export const KIDON_SHOT_8B_WIDTH = safeDiv(KIDON_WIDTH * 3, 2);
-export const KIDON_SHOT_8B_HEIGHT = safeDiv(KIDON_HEIGHT, 4);
-export const KIDON_SHOT_8B_TRIANGLES = makeLaserTriangles(KIDON_SHOT_8B_WIDTH, KIDON_SHOT_8B_HEIGHT);
-export const KIDON_SHOT_8B_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_8B_TRIANGLES);
+export const KIDON_SHOT_B1_WIDTH = safeDiv(KIDON_WIDTH * 3, 2);
+export const KIDON_SHOT_B1_HEIGHT = safeDiv(KIDON_HEIGHT, 4);
+export const KIDON_SHOT_B1_TRIANGLES = makeLaserTriangles(KIDON_SHOT_B1_WIDTH, KIDON_SHOT_B1_HEIGHT);
+export const KIDON_SHOT_B1_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_B1_TRIANGLES);
 
