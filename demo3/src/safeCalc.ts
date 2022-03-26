@@ -31,12 +31,9 @@ export function normalizeAngle(x: number) {
 
 export function angleDiff(x: number, y: number) {
 	let diff = x - y;
-	console.log("DIFF1: " + diff);
 	diff = normalizeAngle(diff);
-	console.log("DIFF2: " + diff);
 	if (diff > safeDiv(MAX_INT_ANGLE, 2))
 		diff -= MAX_INT_ANGLE;
-	console.log("DIFF3: " + diff);
 	return diff;
 }
 

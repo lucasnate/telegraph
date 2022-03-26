@@ -20,9 +20,9 @@ const FRAME_STEP = 1000 / 60;
 class Game {
     private telegraph: Telegraph<string>;
     private renderer = new Renderer();	
-    private inputter = new Inputter([keyCodes.z, keyCodes.x, keyCodes.c, keyCodes.s,
+    private inputter = new Inputter([keyCodes.z, keyCodes.x, keyCodes.c, 
 									 keyCodes.upArrow, keyCodes.downArrow, keyCodes.leftArrow,
-									 keyCodes.rightArrow]);
+									 keyCodes.rightArrow, keyCodes.a, keyCodes.s]);
     private gameState = createGameState();
 	private winningSyncData: GameSyncData | null = null;
 	private syncCallback: (winningSyncData: GameSyncData) => void = () => {};
