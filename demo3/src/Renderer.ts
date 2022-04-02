@@ -1,5 +1,5 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
-import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp, getMaxBatt, WinScreen, assertDefinedForAllEnum } from './GameState';
+import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp, getMaxBatt, getMaxWarp, WinScreen, assertDefinedForAllEnum, getEntityState } from './GameState';
 import { MAX_INT_ANGLE, max, min } from './safeCalc';
 import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
 
@@ -181,6 +181,9 @@ function getBlockstunShipColor(entity: Entity) {
 	}	
 }
 
+function getWarpShipColor(entity: Entity) {
+	return {r: 0.0, g: 1.0, b: 0.0};
+}
 
 type EntityColorHandler = { (x: Entity): Color };
 const SHIP_COLOR_HANDLER_MAP = (() => {
@@ -192,12 +195,13 @@ const SHIP_COLOR_HANDLER_MAP = (() => {
 	map.set(EntityState.Active, getStartupShipColor);
 	map.set(EntityState.Hitstun, getHitstunShipColor);
 	map.set(EntityState.Blockstun, getBlockstunShipColor);
+	map.set(EntityState.Warp, getWarpShipColor);
 	return map;
 })();
 assertDefinedForAllEnum(SHIP_COLOR_HANDLER_MAP, EntityState);
 
 function getShipColor(entity: Entity) {
-	return SHIP_COLOR_HANDLER_MAP.get(entity.state)!(entity);
+	return SHIP_COLOR_HANDLER_MAP.get(getEntityState(entity))!(entity);
 }
 
 function getShotColor(entity: Entity) {
@@ -597,10 +601,11 @@ export class Renderer {
 		if (this.barGlowFrames[barOffset] > 0) {
 			--this.barGlowFrames[barOffset];
 		}
-		const curValue = barType === BarType.HP ? entity.hp : barType === BarType.BATT ? entity.batt : 100;
-		const maxValue = barType === BarType.HP ? getMaxHp(entity.type) : barType === BarType.BATT ? getMaxBatt(entity.type) : 100;
+		const curValue = barType === BarType.HP ? entity.hp : barType === BarType.BATT ? entity.batt : entity.warp;
+		const maxValue = barType === BarType.HP ? getMaxHp(entity.type) : barType === BarType.BATT ? getMaxBatt(entity.type) : getMaxWarp(entity.type);
 		if (this.barLastValue[barOffset] != curValue &&
-			!(barType === BarType.BATT && curValue > this.barLastValue[barOffset])) {
+			!(barType === BarType.BATT && curValue > this.barLastValue[barOffset]) &&
+			!(barType === BarType.WARP && curValue > this.barLastValue[barOffset])) {
 			this.barGlowFrames[barOffset] = MAX_GLOW_FRAMES;
 		}
 		this.barLastValue[barOffset] = curValue;

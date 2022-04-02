@@ -23,7 +23,7 @@ class Game {
     private inputter = new Inputter([keyCodes.z, keyCodes.x, keyCodes.c,
 									 keyCodes.a, keyCodes.s, keyCodes.d,
 									 keyCodes.upArrow, keyCodes.downArrow, keyCodes.leftArrow,
-									 keyCodes.rightArrow, keyCodes.q, keyCodes.w]);
+									 keyCodes.rightArrow, keyCodes.q, keyCodes.w, keyCodes.shift]);
     private gameState = createGameState();
 	private winningSyncData: GameSyncData | null = null;
 	private syncCallback: (winningSyncData: GameSyncData) => void = () => {};
