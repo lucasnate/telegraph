@@ -1,7 +1,7 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp, getMaxBatt, getMaxWarp, WinScreen, assertDefinedForAllEnum, getEntityState } from './GameState';
 import { MAX_INT_ANGLE, max, min } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
+import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
 
 // Vertex shader program
 const VERTEX_SHADER_SOURCE = `
@@ -228,6 +228,8 @@ const ENTITY_COLOR_HANDLER_MAP = (() => {
 	map.set(EntityType.ShotB2, getShotColor);
 	map.set(EntityType.ShotC1Big, getShotColor);
 	map.set(EntityType.ShotC1Small, getShotColor);
+	map.set(EntityType.ShotC2Big, getShotColor);
+	map.set(EntityType.ShotC2Small, getShotColor);
 	return map;
 })();
 assertDefinedForAllEnum(ENTITY_COLOR_HANDLER_MAP, EntityType);
@@ -380,7 +382,8 @@ export class Renderer {
 						   [EntityType.ShotB2, this.bufferWithCount(KIDON_SHOT_B2_TRIANGLES)],
 						   [EntityType.ShotC1Big, this.bufferWithCount(KIDON_SHOT_C1_BIG_TRIANGLES)],
 						   [EntityType.ShotC1Small, this.bufferWithCount(KIDON_SHOT_C1_SMALL_TRIANGLES)],
-						  ]);
+						   [EntityType.ShotC2Big, this.bufferWithCount(KIDON_SHOT_C2_BIG_TRIANGLES)],
+						   [EntityType.ShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES)]]);
 		assertDefinedForAllEnum(map, EntityType);
 
 		return {
