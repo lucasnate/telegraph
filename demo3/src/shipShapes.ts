@@ -1,6 +1,6 @@
 // TODO: This file needs to have float protection
 
-import { safeDiv, MAX_INT_ANGLE } from './safeCalc';
+import { safeCosMul, safeSinMul, safeDiv, MAX_INT_ANGLE } from './safeCalc';
 import { getCoarseSquare, getCoarseRadius, Point, rotateAndTranslate } from './spatial';
 
 export const KIDON_WIDTH = 3500;
@@ -108,3 +108,12 @@ export const KIDON_SHOT_C2_SMALL_WIDTH = safeDiv(KIDON_WIDTH, 2)
 export const KIDON_SHOT_C2_SMALL_HEIGHT = safeDiv(KIDON_HEIGHT, 4)
 export const KIDON_SHOT_C2_SMALL_TRIANGLES = makeKidonShotTriangles(KIDON_SHOT_C2_SMALL_WIDTH, KIDON_SHOT_C2_SMALL_HEIGHT);
 export const KIDON_SHOT_C2_SMALL_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_C2_SMALL_TRIANGLES);
+
+export const PARTICLE_TRIANGLES = [
+	0, -200,
+	0, +200,
+	+200, 0,
+	0, -200,
+	0, +200,
+	-200, 0
+];

@@ -32,8 +32,12 @@ class Game {
 	private loopLastRenderTime = 0;
 	private loopLag = 0;
 	private loopFps = 0;
+	private loopRenderMs = 0;
+	private loopUpdateMs = 0;
 	private loopFpsSecond = Math.floor(performance.now() / 1000);
 	private loopLastFps = 0;
+	private loopLastRenderMs = 0;
+	private loopLastUpdateMs = 0;
 
     private localPlayerHandle: number | null = null;
     private remotePlayerHandle: number | null = null;
@@ -83,8 +87,11 @@ class Game {
 	}
 
 	private advanceFrame(SyncInputResultValue: SyncInputResultValue): void {
+		const t0 = performance.now();
 		updateGameState(this.gameState, [SyncInputResultValue.inputs[0][0], SyncInputResultValue.inputs[1][0]], this.winningSyncData!);
 		this.telegraph.advanceFrame();
+		const t1 = performance.now();
+		this.loopUpdateMs += t1 - t0;
 	}
 
 	private runRollbackUpdate(): void {
@@ -154,8 +161,11 @@ class Game {
 					if (this.loopFpsSecond === curFpsSecond)
 						++this.loopFps;
 					else {
-						this.renderer.fpsDisplayValue = this.loopFps;
+						this.renderer.fpsDisplayValue = this.loopFps.toString() + ", " + this.loopUpdateMs.toString() + "," + this.loopRenderMs.toString();
 						this.loopLastFps = this.loopFps;
+						this.loopLastRenderMs = this.loopRenderMs;
+						this.loopLastUpdateMs = this.loopUpdateMs;
+						this.loopRenderMs = this.loopUpdateMs = 0;
 						this.loopFps = 1;
 						this.loopFpsSecond = curFpsSecond;
 					}
@@ -167,7 +177,10 @@ class Game {
         const lagOffset = this.loopLag / FRAME_STEP;
 		const networkStats = this.telegraph.getNetworkStats(this.remotePlayerHandle!).value;
 		if (isRender) {
+			const t0 = performance.now();
 			this.renderer.render(this.gameState, this.localPlayerHandle!);
+			const t1 = performance.now();
+			this.loopRenderMs += t1 - t0;
 		}
         this.loopLastTime = time;
 		if (isRender) {

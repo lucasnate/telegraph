@@ -92,3 +92,20 @@ export function safeAtan2(y: number, x: number): number {
 	return 0;
 }
 
+export interface MulberryState {
+	mulberryState: number
+}
+
+function mulberry32(state: MulberryState) {
+    var t = state.mulberryState += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0);
+}
+
+export function rand(state: MulberryState, min: number, max: number): number {
+	let x = mulberry32(state);
+	x = x % (max - min + 1);
+	x += min;
+	return x;
+}

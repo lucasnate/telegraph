@@ -1,7 +1,7 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
-import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, EntityState, EntityColor, getMaxHp, getMaxBatt, getMaxWarp, WinScreen, assertDefinedForAllEnum, getEntityState } from './GameState';
+import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, Renderable, RenderableType, EntityState, EntityColor, getMaxHp, getMaxBatt, getMaxWarp, WinScreen, assertDefinedForAllEnum, getEntityState, getFadeFrames, THRUST_FRAMES, CollisionSide, WARP_AFTER_IMAGE_TTL_FRAMES } from './GameState';
 import { MAX_INT_ANGLE, max, min } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT } from './shipShapes';
+import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES } from './shipShapes';
 
 // Vertex shader program
 const VERTEX_SHADER_SOURCE = `
@@ -9,23 +9,41 @@ attribute vec4 aVertexPosition;
 
 uniform mat4 uCameraMatrix;
 uniform mat4 uModelSpecificMatrix;
+varying vec4 vVertexPosition;
 
 void main() {
+vVertexPosition = aVertexPosition;
 gl_Position = uCameraMatrix * uModelSpecificMatrix * aVertexPosition;
 }
 `;
 
 const FRAGMENT_SHADER_SOURCE = `
-uniform lowp vec4 uColor; 
+precision lowp float;
+
+uniform lowp vec4 uColor1; 
+uniform lowp vec4 uColor2; 
+uniform lowp vec4 uColor3; 
+varying vec4 vVertexPosition;
 
 void main() {
-gl_FragColor = uColor;
+    const lowp float laserBorder = 3500.0 / 4.0 / 2.0;
+    const lowp float laserBorder1 = laserBorder / 3.0;
+    lowp float y = abs(vVertexPosition.y);
+    if (y < laserBorder1) {
+        lowp float mixValue = (laserBorder1 - y) / laserBorder1;
+        gl_FragColor = mix(uColor2, uColor1, mixValue);
+    } else {
+        y -= laserBorder1;
+        lowp float mixValue = ((laserBorder - laserBorder1) - y) / (laserBorder - laserBorder1);
+        gl_FragColor = mix(uColor3, uColor2, clamp(mixValue, 0.0, 1.0));
+    }
 }
 `
 interface Color {
 	r: number;
 	g: number;
 	b: number;
+	a: number;
 }
 interface AttribLocations {
 	vertexPosition: number;
@@ -34,7 +52,9 @@ interface AttribLocations {
 interface UniformLocations {
 	cameraMatrix: WebGLUniformLocation;
 	modelSpecificMatrix: WebGLUniformLocation;
-	color: WebGLUniformLocation;
+	color1: WebGLUniformLocation;
+	color2: WebGLUniformLocation;
+	color3: WebGLUniformLocation;
 }
 
 interface ProgramInfo {
@@ -45,9 +65,11 @@ interface ProgramInfo {
 
 type BufferWithCount = { buffer: WebGLBuffer, count: number };
 type EntityBufferMap = Map<EntityType, BufferWithCount>;
+type RenderableBufferMap = Map<RenderableType, BufferWithCount>;
 
 interface Buffers {
 	entityBuffers: EntityBufferMap;
+	renderableBuffers: RenderableBufferMap;
 	grid: BufferWithCount;
 	stars: BufferWithCount;
 	margin: BufferWithCount;
@@ -133,59 +155,98 @@ const BOTTOM_MARGIN = makeTriangleRect(WORLD_WIDTH  * (-0.5 - MARGIN_FRACTION),
 const TOP_MARGIN = BOTTOM_MARGIN.map((x) => { return -x; });
 const MARGIN_TRIANGLES = LEFT_MARGIN.concat(RIGHT_MARGIN).concat(BOTTOM_MARGIN).concat(TOP_MARGIN);
 
-function getIdleShipColor(entity: Entity) {
+function getIdleShipColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
 	switch (entity.color) {
 		case EntityColor.Red:
-			return {r: 1, g: 0, b: 0};
+			color1.r = color2.r = color3.r = 1;
+			color1.g = color2.g = color3.g = 0;
+			color1.b = color2.b = color3.b = 0;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		case EntityColor.Blue:
-			return {r: 0, g: 0, b: 1};
+			color1.r = color2.r = color3.r = 0;
+			color1.g = color2.g = color3.g = 0;
+			color1.b = color2.b = color3.b = 1;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		default:
 			throw new Error("Unknown color");
 	}
 }
 
-function getMovingShipColor(entity: Entity) {
+function getMovingShipColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
 	switch (entity.color) {
 		case EntityColor.Red:
-			return {r: 0.7, g: 0.5, b:0.5};
+			color1.r = color2.r = color3.r = 0.7;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 0.5;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		case EntityColor.Blue:
-			return {r: 0.5, g: 0.5, b:0.7};
+			color1.r = color2.r = color3.r = 0.5;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 0.7;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		default:
 			throw new Error("Unknown color");
 	}
 }
 
-function getStartupShipColor(entity: Entity) {
+function getStartupShipColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
 	switch (entity.color) {
 		case EntityColor.Red:
-			return {r: 1.0, g: 0.5, b: 0.5};
+			color1.r = color2.r = color3.r = 1;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 0.5;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		case EntityColor.Blue:
-			return {r: 0.5, g: 0.5, b: 1.0};
+			color1.r = color2.r = color3.r = 0.5;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 1;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		default:
 			throw new Error("Unknown color");
 	}	
 }
 
-function getHitstunShipColor(entity: Entity) {
-	return {r: 1.0, g: 1.0, b: 1.0};
+function getHitstunShipColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
+	color1.r = color2.r = color3.r = 1;
+	color1.g = color2.g = color3.g = 1;
+	color1.b = color2.b = color3.b = 1;
+	color1.a = color2.a = color3.a = 1;
 }
 
-function getBlockstunShipColor(entity: Entity) {
+function getBlockstunShipColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
 	switch (entity.color) {
 		case EntityColor.Red:
-			return {r: 1.0, g: 0.5, b: 0.5};
+			color1.r = color2.r = color3.r = 1;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 0.5;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		case EntityColor.Blue:
-			return {r: 0.5, g: 0.5, b: 1.0};
+			color1.r = color2.r = color3.r = 0.5;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 1;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		default:
 			throw new Error("Unknown color");
 	}	
 }
 
-function getWarpShipColor(entity: Entity) {
-	return {r: 0.0, g: 1.0, b: 0.0};
+function getWarpShipColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
+	color1.r = color2.r = color3.r = 0;
+	color1.g = color2.g = color3.g = 1.0;
+	color1.b = color2.b = color3.b = 0;
+	color1.a = color2.a = color3.a = 1;
 }
 
-type EntityColorHandler = { (x: Entity): Color };
+type EntityColorHandler = { (x: Entity, color1: Color, color2: Color, color3: Color): void };
+type RenderableColorHandler = { (x: Renderable, color1: Color, color2: Color, color3: Color): void };
 const SHIP_COLOR_HANDLER_MAP = (() => {
 	let map = new Map<EntityState, EntityColorHandler>();
 	map.set(EntityState.Idle, getIdleShipColor);
@@ -200,23 +261,111 @@ const SHIP_COLOR_HANDLER_MAP = (() => {
 })();
 assertDefinedForAllEnum(SHIP_COLOR_HANDLER_MAP, EntityState);
 
-function getShipColor(entity: Entity) {
-	return SHIP_COLOR_HANDLER_MAP.get(getEntityState(entity))!(entity);
+function getShipColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
+	SHIP_COLOR_HANDLER_MAP.get(getEntityState(entity))!(entity, color1, color2, color3);
 }
 
-function getShotColor(entity: Entity) {
+function getShotColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
 	switch (entity.color) {
 		case EntityColor.Neutral:
-			return {r: 1, g: 1, b: 1};
+			color1.r = color2.r = color3.r = 1;
+			color1.g = color2.g = color3.g = 1;
+			color1.b = color2.b = color3.b = 1;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		case EntityColor.Red:
-			return {r: 1.0, g: 0.5, b: 0.5};
+			color1.r = color2.r = color3.r = 1;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 0.5;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		case EntityColor.Blue:
-			return {r: 0.5, g: 0.5, b: 1.0};
+			color1.r = color2.r = color3.r = 0.5;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 1;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		case EntityColor.Purple:
-			return {r: 1.0, g: 0.5, b: 1.0};
+			color1.r = color2.r = color3.r = 1;
+			color1.g = color2.g = color3.g = 0.5;
+			color1.b = color2.b = color3.b = 1;
+			color1.a = color2.a = color3.a = 1;
+			break;
 		default:
 			throw new Error("Unknown color");
 	}
+}
+
+function getLaserShotColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
+	const alpha = entity.collisionSide == CollisionSide.None ? (entity.framesToStateChange / getFadeFrames(entity.type) * 1.0) : 1.0;	
+	switch (entity.color) {
+		case EntityColor.Blue:
+		case EntityColor.Red:
+		case EntityColor.Purple:
+			color1.r = entity.color !== EntityColor.Blue ? 1 : 0.5;
+			color1.g = 0.5;
+			color1.b = entity.color !== EntityColor.Red ? 1 : 0.5;
+			color1.a = alpha;
+			color2.r = entity.color !== EntityColor.Blue ? 1 : 0;
+			color2.g = 0;
+			color2.b = entity.color !== EntityColor.Red ? 1 : 0;
+			color2.a = alpha / 2;
+			color3.r = entity.color !== EntityColor.Blue ? 1 : 0;
+			color3.g = 0;
+			color3.b = entity.color !== EntityColor.Red ? 1 : 0;
+			color3.a = 0;			
+			break;
+		default:
+			throw new Error("Unknown color");
+	}
+}
+
+function getParticleColor(rend: Renderable, color1: Color, color2: Color, color3: Color): void
+{
+	const m1 = rend.remainingFrames;
+	const m2 = rend.totalFrames - rend.remainingFrames;
+	const d = rend.totalFrames;
+	let r1 = 0, g1 = 0, b1 = 0, a1 = 0, r2 = 0, g2 = 0, b2 = 0, a2 = 0;
+	switch (rend.type) {
+		case RenderableType.WhiteExplosionParticle:
+			r1 = g1 = b1 = 1;
+			a1 = 0.8;
+			r2 = 1;
+			g2 = 0.8;
+			b2 = 0;
+			a2 = 0;
+			break;
+		case RenderableType.BlueExplosionParticle:
+		case RenderableType.RedExplosionParticle:
+			r1 = g1 = b1 = 0;
+			r2 = g2 = b2 = 0;
+			a1 = 1;
+			a2 = 0;
+			if (rend.type === RenderableType.BlueExplosionParticle)
+				b1 = b2 = 1;
+			else
+				r1 = r2 = 1;
+			break;
+		case RenderableType.ThrustParticle:
+			r1 = r2 = 1;
+			b1 = b2 = 0;
+			g1 = 0.8;
+			g2 = 0;
+			a1 = 1;
+			a2 = 0;
+			break;
+	}
+	color1.r = color2.r = color3.r = (r1 * m1 + r2 * m2) / d;
+	color1.g = color2.g = color3.g = (g1 * m1 + g2 * m2) / d;
+	color1.b = color2.b = color3.b = (b1 * m1 + b2 * m2) / d;
+	color1.a = color2.a = color3.a = (a1 * m1 + a2 * m2) / d;
+}
+
+function getAfterImageColor(renderable: Renderable, color1: Color, color2: Color, color3: Color): void {
+	color1.r = color2.r = color3.r = 0;
+	color1.g = color2.g = color3.g = 255;
+	color1.b = color2.b = color3.b = 0;
+	color1.a = color2.a = color3.a = 0.9 * renderable.remainingFrames / WARP_AFTER_IMAGE_TTL_FRAMES;
 }
 
 const ENTITY_COLOR_HANDLER_MAP = (() => {
@@ -224,18 +373,30 @@ const ENTITY_COLOR_HANDLER_MAP = (() => {
 	map.set(EntityType.Ship, getShipColor);
 	map.set(EntityType.ShotA1, getShotColor);
 	map.set(EntityType.ShotA2, getShotColor);
-	map.set(EntityType.ShotB1, getShotColor);
-	map.set(EntityType.ShotB2, getShotColor);
+	map.set(EntityType.ShotB1, getLaserShotColor);
+	map.set(EntityType.ShotB2, getLaserShotColor);
 	map.set(EntityType.ShotC1Big, getShotColor);
 	map.set(EntityType.ShotC1Small, getShotColor);
 	map.set(EntityType.ShotC2Big, getShotColor);
 	map.set(EntityType.ShotC2Small, getShotColor);
 	return map;
 })();
+
+const RENDERABLE_COLOR_HANDLER_MAP = new Map<RenderableType, RenderableColorHandler>(
+	[[RenderableType.ThrustParticle, getParticleColor],
+	 [RenderableType.BlueExplosionParticle, getParticleColor],
+	 [RenderableType.RedExplosionParticle, getParticleColor],
+	 [RenderableType.WhiteExplosionParticle, getParticleColor],
+	 [RenderableType.KidonWarpAfterImage, getAfterImageColor]]);
+
 assertDefinedForAllEnum(ENTITY_COLOR_HANDLER_MAP, EntityType);
 
-function getEntityColor(entity: Entity) {
-	return ENTITY_COLOR_HANDLER_MAP.get(entity.type)!(entity);
+function getEntityColor(entity: Entity, color1: Color, color2: Color, color3: Color) {
+	return ENTITY_COLOR_HANDLER_MAP.get(entity.type)!(entity, color1, color2, color3);
+}
+
+function getRenderableColor(renderable: Renderable, color1: Color, color2: Color, color3: Color) {
+	return RENDERABLE_COLOR_HANDLER_MAP.get(renderable.type)!(renderable, color1, color2, color3);
 }
 
 function textMetricsHeight(metrics: TextMetrics): number {
@@ -268,7 +429,7 @@ export class Renderer {
 	readonly programInfo: ProgramInfo;
 	readonly buffers: Buffers;
 	lastDiff: number | null = null;
-	fpsDisplayValue: number = 0;
+	fpsDisplayValue: string = "";
 
 	lastPlayerCanvasWidth: number = 0;
 	lastPlayerCanvasHeight: number = 0;
@@ -356,7 +517,9 @@ export class Renderer {
 			uniformLocations: {
 				cameraMatrix: this.gl.getUniformLocation(shaderProgram, 'uCameraMatrix')!,
 				modelSpecificMatrix: this.gl.getUniformLocation(shaderProgram, 'uModelSpecificMatrix')!,
-				color: this.gl.getUniformLocation(shaderProgram, 'uColor')!,
+				color1: this.gl.getUniformLocation(shaderProgram, 'uColor1')!,
+				color2: this.gl.getUniformLocation(shaderProgram, 'uColor2')!,
+				color3: this.gl.getUniformLocation(shaderProgram, 'uColor3')!,
 			},
 		};
 		this.gl.useProgram(shaderProgram);
@@ -374,20 +537,29 @@ export class Renderer {
 		return buffer!;
 	}
 
-	createBuffers() {
-		let map = new Map([[EntityType.Ship, this.bufferWithCount(KIDON_TRIANGLES)],
-						   [EntityType.ShotA1, this.bufferWithCount(KIDON_SHOT_A1_TRIANGLES)],
-						   [EntityType.ShotA2, this.bufferWithCount(KIDON_SHOT_A2_TRIANGLES)],
-						   [EntityType.ShotB1, this.bufferWithCount(KIDON_SHOT_B1_TRIANGLES)],
-						   [EntityType.ShotB2, this.bufferWithCount(KIDON_SHOT_B2_TRIANGLES)],
-						   [EntityType.ShotC1Big, this.bufferWithCount(KIDON_SHOT_C1_BIG_TRIANGLES)],
-						   [EntityType.ShotC1Small, this.bufferWithCount(KIDON_SHOT_C1_SMALL_TRIANGLES)],
-						   [EntityType.ShotC2Big, this.bufferWithCount(KIDON_SHOT_C2_BIG_TRIANGLES)],
-						   [EntityType.ShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES)]]);
-		assertDefinedForAllEnum(map, EntityType);
+	createBuffers(): Buffers  {
+		const kidonTrianglesBuf = this.bufferWithCount(KIDON_TRIANGLES);
+		const particleBuf = this.bufferWithCount(PARTICLE_TRIANGLES);
+		let map1 = new Map([[EntityType.Ship, kidonTrianglesBuf],
+							[EntityType.ShotA1, this.bufferWithCount(KIDON_SHOT_A1_TRIANGLES)],
+							[EntityType.ShotA2, this.bufferWithCount(KIDON_SHOT_A2_TRIANGLES)],
+							[EntityType.ShotB1, this.bufferWithCount(KIDON_SHOT_B1_TRIANGLES)],
+							[EntityType.ShotB2, this.bufferWithCount(KIDON_SHOT_B2_TRIANGLES)],
+							[EntityType.ShotC1Big, this.bufferWithCount(KIDON_SHOT_C1_BIG_TRIANGLES)],
+							[EntityType.ShotC1Small, this.bufferWithCount(KIDON_SHOT_C1_SMALL_TRIANGLES)],
+							[EntityType.ShotC2Big, this.bufferWithCount(KIDON_SHOT_C2_BIG_TRIANGLES)],
+							[EntityType.ShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES)]]);
+		let map2 = new Map([[RenderableType.ThrustParticle, particleBuf],
+							[RenderableType.RedExplosionParticle, particleBuf],
+							[RenderableType.BlueExplosionParticle, particleBuf],
+							[RenderableType.WhiteExplosionParticle, particleBuf],
+							[RenderableType.KidonWarpAfterImage, kidonTrianglesBuf]]);
+		assertDefinedForAllEnum(map1, EntityType);
+		assertDefinedForAllEnum(map2, RenderableType);
 
 		return {
-			entityBuffers: map,
+			entityBuffers: map1,
+			renderableBuffers: map2,
 			grid: this.bufferWithCount(GRID_LINES),
 			stars: this.bufferWithCount(STAR_TRIANGLES),
 			margin: this.bufferWithCount(MARGIN_TRIANGLES),
@@ -395,11 +567,11 @@ export class Renderer {
 	}
 	
 	clear() {
+		this.gl.enable(this.gl.BLEND);  
+		this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);  
 		this.gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
 		this.gl.clearDepth(1.0);                 // Clear everything
 		// this.gl.enable(this.gl.DEPTH_TEST);           // Enable depth testing
-		// this.gl.enable(this.gl.BLEND);  
-		// this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);  
 		// this.gl.depthFunc(this.gl.LEQUAL);            // Near things obscure far things
 		
 		// Clear the canvas before we start drawing on it.
@@ -499,7 +671,9 @@ export class Renderer {
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.stars.buffer);
 		this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
 		this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
-		this.gl.uniform4f(this.programInfo.uniformLocations.color, 0.8, 0.8, 0.8, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color1, 0.8, 0.8, 0.8, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color2, 0.8, 0.8, 0.8, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color3, 0.8, 0.8, 0.8, 1);
 		this.gl.drawArrays(this.gl.TRIANGLES, 0, this.buffers.stars.count);
 	}
 
@@ -508,7 +682,9 @@ export class Renderer {
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.grid.buffer);
 		this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
 		this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
-		this.gl.uniform4f(this.programInfo.uniformLocations.color, 0.3, 0.3, 0.3, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color1, 0.3, 0.3, 0.3, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color2, 0.8, 0.8, 0.8, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color3, 0.8, 0.8, 0.8, 1);
 		this.gl.drawArrays(this.gl.LINES, 0, this.buffers.grid.count);
 	}
 
@@ -517,29 +693,55 @@ export class Renderer {
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.margin.buffer);
 		this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
 		this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
-		this.gl.uniform4f(this.programInfo.uniformLocations.color, 0.5, 0.25, 0.5, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color1, 0.5, 0.25, 0.5, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color2, 0.5, 0.25, 0.5, 1);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color3, 0.5, 0.25, 0.5, 1);
 		this.gl.drawArrays(this.gl.TRIANGLES, 0, this.buffers.margin.count);
+	}
+
+	posForRenderEntity = vec3.create();
+	matrixForRenderEntity = mat4.create();
+	scaleVecForRenderEntity = vec3.create();
+	axisVecForRenderEntity = vec3.clone([0,0,1]);
+	renderEntity(x: number, y: number, angle: number, sizePct: number, bufWithCnt: BufferWithCount,
+				 color1: Color, color2: Color, color3: Color) {
+		const pos = this.posForRenderEntity;
+		const matrix = this.matrixForRenderEntity;
+		this.gl.uniform4f(this.programInfo.uniformLocations.color1, color1.r, color1.g, color1.b, color1.a);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color2, color2.r, color2.g, color2.b, color2.a);
+		this.gl.uniform4f(this.programInfo.uniformLocations.color3, color3.r, color3.g, color3.b, color3.a);
+		
+		pos[0] = x;
+		pos[1] = y;
+		mat4.identity(matrix);
+		mat4.translate(matrix, matrix, pos);
+		mat4.rotate(matrix, matrix, angle * 2 * Math.PI / MAX_INT_ANGLE, this.axisVecForRenderEntity);
+		this.scaleVecForRenderEntity[0] = this.scaleVecForRenderEntity[1] = this.scaleVecForRenderEntity[2] = sizePct / 100.0;
+		mat4.scale(matrix, matrix, this.scaleVecForRenderEntity);
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, bufWithCnt.buffer);
+		this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
+		this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
+		this.gl.uniformMatrix4fv(this.programInfo.uniformLocations.modelSpecificMatrix, false, matrix);
+		this.gl.drawArrays(this.gl.TRIANGLES, 0, bufWithCnt.count);
 	}
 	
 	renderEntities(state: GameState) {
-		let pos = vec3.create();
-		let matrix = mat4.create();
-		let color: Color = {r: 0, g: 0, b: 0};
+		let color1: Color = {r: 0, g: 0, b: 0, a: 0};
+		let color2: Color = {r: 0, g: 0, b: 0, a: 0};
+		let color3: Color = {r: 0, g: 0, b: 0, a: 0};
+		
 		for (let i = 0, l = state.entities.length; i < l; ++i) {
-			color = getEntityColor(state.entities[i]);
-			this.gl.uniform4f(this.programInfo.uniformLocations.color, color.r, color.g, color.b, 1);
-
-			pos[0] = state.entities[i].x;
-			pos[1] = state.entities[i].y;
-			mat4.identity(matrix);
-			mat4.translate(matrix, matrix, pos);
-			mat4.rotate(matrix, matrix, state.entities[i].angleInt * 2 * Math.PI / MAX_INT_ANGLE, [0,0,1]);
-			let bufWithCnt = this.buffers.entityBuffers.get(state.entities[i].type)!;
-			this.gl.bindBuffer(this.gl.ARRAY_BUFFER, bufWithCnt.buffer);
-			this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
-			this.gl.enableVertexAttribArray(this.programInfo.attribLocations.vertexPosition);
-			this.gl.uniformMatrix4fv(this.programInfo.uniformLocations.modelSpecificMatrix, false, matrix);
-			this.gl.drawArrays(this.gl.TRIANGLES, 0, bufWithCnt.count);
+			const entity = state.entities[i];
+			getEntityColor(entity, color1, color2, color3);
+			this.renderEntity(entity.x, entity.y, entity.angleInt, 100,
+							  this.buffers.entityBuffers.get(entity.type)!, color1, color2, color3);
+		}
+		
+		for (let i = 0, l = state.renderables.length; i < l; ++i) {
+			const renderable = state.renderables[i];
+			getRenderableColor(renderable, color1, color2, color3);
+			this.renderEntity(renderable.x, renderable.y, renderable.angleInt, renderable.sizePct,
+							  this.buffers.renderableBuffers.get(renderable.type)!, color1, color2, color3);
 		}
 	}
 
@@ -686,7 +888,7 @@ export class Renderer {
 		ctx.fillText((isPlayer2 ? state.player2CurrentComboHits : state.player1CurrentComboHits).toString() + " hits", canvas.width * (1 - COMBO_HITS_RATIO), this.titleHeight);
 		if (!isPlayer2) {
 			ctx.font = '10px monospace';
-			ctx.fillText(this.fpsDisplayValue.toString(), 0, canvas.height);
+			ctx.fillText(this.fpsDisplayValue, 0, canvas.height);
 		}
 		ctx.font = this.hpFontSize.toString() + 'px monospace';
 		ctx.fillText(HP, this.barWidth / 2 - this.hpWidth / 2, height);
