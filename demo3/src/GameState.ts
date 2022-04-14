@@ -216,15 +216,15 @@ const FRAMES_TO_IDLE_AFTER_UP = 1;
 export interface GameSyncData extends SyncData {}
 
 export enum EntityType {
-	Ship,
-	ShotA1,
-	ShotA2,
-	ShotB1,
-	ShotB2,
-	ShotC1Big,
-	ShotC1Small,
-	ShotC2Big,
-	ShotC2Small
+	KidonShip,
+	KidonShotA1,
+	KidonShotA2,
+	KidonShotB1,
+	KidonShotB2,
+	KidonShotC1Big,
+	KidonShotC1Small,
+	KidonShotC2Big,
+	KidonShotC2Small
 }
 
 export enum RenderableType {
@@ -289,11 +289,16 @@ export interface Entity {
 	shouldBeRemoved: boolean
 }
 
+function isShip(type: EntityType): boolean {
+	return type === EntityType.KidonShip;
+}
+
 function disableShipWarp(entity: Entity) {
 	if (entity.stateDoNotTouchDirectly !== EntityState.Warp)
 		return;
 
-	assert(entity.type === EntityType.Ship, "unsupported type for warp disabling");
+	assert(isShip(entity.type), "unsupported type for warp disabling");
+
 	entity.vx = entity.preWarpVx;
 	entity.vy = entity.preWarpVy;
 	entity.stateDoNotTouchDirectly = EntityState.Idle;
@@ -604,20 +609,20 @@ function activateShot(entity_i: number, entities: Entity[], shotType: EntityType
 	entities.push(newEntity);
 }
 
-function activateA2(entity_i: number, entities: Entity[]) {
-	activateShot(entity_i, entities, EntityType.ShotA2, KIDON_SHOT_A2_SPEED, KIDON_SHOT_A2_ACTIVE_FRAMES, KIDON_SHOT_A2_RECOVERY_FRAMES, false);
+function activateKidonA2(entity_i: number, entities: Entity[]) {
+	activateShot(entity_i, entities, EntityType.KidonShotA2, KIDON_SHOT_A2_SPEED, KIDON_SHOT_A2_ACTIVE_FRAMES, KIDON_SHOT_A2_RECOVERY_FRAMES, false);
 }
 
-function activateA1(entity_i: number, entities: Entity[]) {
-	activateShot(entity_i, entities, EntityType.ShotA1, KIDON_SHOT_A1_SPEED, KIDON_SHOT_A1_ACTIVE_FRAMES, KIDON_SHOT_A1_RECOVERY_FRAMES, false);
+function activateKidonA1(entity_i: number, entities: Entity[]) {
+	activateShot(entity_i, entities, EntityType.KidonShotA1, KIDON_SHOT_A1_SPEED, KIDON_SHOT_A1_ACTIVE_FRAMES, KIDON_SHOT_A1_RECOVERY_FRAMES, false);
 }
 
-function activateC1(entity_i: number, entities: Entity[]) {
-	activateShot(entity_i, entities, EntityType.ShotC1Big, KIDON_SHOT_C1_SPEED, KIDON_SHOT_C1_ACTIVE_FRAMES, KIDON_SHOT_C1_RECOVERY_FRAMES, true);
+function activateKidonC1(entity_i: number, entities: Entity[]) {
+	activateShot(entity_i, entities, EntityType.KidonShotC1Big, KIDON_SHOT_C1_SPEED, KIDON_SHOT_C1_ACTIVE_FRAMES, KIDON_SHOT_C1_RECOVERY_FRAMES, true);
 }
 
-function activateC2(entity_i: number, entities: Entity[]) {
-	activateShot(entity_i, entities, EntityType.ShotC2Big, KIDON_SHOT_C2_BIG_SPEED, KIDON_SHOT_C2_BIG_ACTIVE_FRAMES, KIDON_SHOT_C2_RECOVERY_FRAMES, true);
+function activateKidonC2(entity_i: number, entities: Entity[]) {
+	activateShot(entity_i, entities, EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_SPEED, KIDON_SHOT_C2_BIG_ACTIVE_FRAMES, KIDON_SHOT_C2_RECOVERY_FRAMES, true);
 }
 
 function activateLaser(entity_i: number, entities: Entity[], shotType: EntityType, activeFrames: number, turn: number, unblockable: boolean) {
@@ -651,23 +656,23 @@ function activateLaser(entity_i: number, entities: Entity[], shotType: EntityTyp
 	entities.push(newEntity);
 }
 
-function activateB2(entity_i: number, entities: Entity[]) {
-	activateLaser(entity_i, entities, EntityType.ShotB2, KIDON_SHOT_B2_ACTIVE_FRAMES, KIDON_SHOT_B2_TURN, false);
+function activateKidonB2(entity_i: number, entities: Entity[]) {
+	activateLaser(entity_i, entities, EntityType.KidonShotB2, KIDON_SHOT_B2_ACTIVE_FRAMES, KIDON_SHOT_B2_TURN, false);
 }
 
-function activateB1(entity_i: number, entities: Entity[]) {
-	activateLaser(entity_i, entities, EntityType.ShotB1, KIDON_SHOT_B1_ACTIVE_FRAMES, KIDON_SHOT_B1_TURN, true);
+function activateKidonB1(entity_i: number, entities: Entity[]) {
+	activateLaser(entity_i, entities, EntityType.KidonShotB1, KIDON_SHOT_B1_ACTIVE_FRAMES, KIDON_SHOT_B1_TURN, true);
 }
 
 type ActivationHandler = { (entity_i: number, entities: Entity[]): void; };
 const ACTIVATION_HANDLER_MAP = (() => {
 	let map = new Map<Move, ActivationHandler>();
-	map.set(Move.A1, activateA1);
-	map.set(Move.B2, activateB2);
-	map.set(Move.B1, activateB1);
-	map.set(Move.A2, activateA2);
-	map.set(Move.C1, activateC1);
-	map.set(Move.C2, activateC2);
+	map.set(Move.A1, activateKidonA1);
+	map.set(Move.B2, activateKidonB2);
+	map.set(Move.B1, activateKidonB1);
+	map.set(Move.A2, activateKidonA2);
+	map.set(Move.C1, activateKidonC1);
+	map.set(Move.C2, activateKidonC2);
 	return map;
 })();
 assertDefinedForAllEnum(ACTIVATION_HANDLER_MAP, Move);
@@ -679,7 +684,7 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 	const entity = entities[entity_i];
 	const state = getEntityState(entity);
 	switch (entity.type) {
-		case EntityType.Ship:
+		case EntityType.KidonShip:
 			if (state !== EntityState.Hitstun && state !== EntityState.Warp) {
 				if (entity.noStablizeFrames > 0)
 					--entity.noStablizeFrames;
@@ -756,12 +761,12 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 			if (entity.warp > KIDON_MAX_WARP)
 				entity.warp = KIDON_MAX_WARP;
 			break;
-		case EntityType.ShotC1Big:
+		case EntityType.KidonShotC1Big:
 			if (entity.framesToStateChange !== KIDON_SHOT_C1_ACTIVE_FRAMES &&
 				(KIDON_SHOT_C1_ACTIVE_FRAMES - entity.framesToStateChange) % KIDON_SHOT_C1_SPAWN_INTERVAL_FRAMES === 0) {
 				for (let i = -1; i <= +1; i += 2) {
 					const spreadAngle = entity.angleInt + i * safeDiv(MAX_INT_ANGLE, 4);
-					const newEntity = {type: EntityType.ShotC1Small,
+					const newEntity = {type: EntityType.KidonShotC1Small,
 									   hp: 1, // TODO: Is this the right thing to put here?
 									   batt: 1, // TODO: Is this the right thing to put here?
 									   warp: 1, // TODO: Is this the right thing to put here?
@@ -785,12 +790,12 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 			if (--entity.framesToStateChange <= 0)
 				entity.shouldBeRemoved = true;
 			break;
-		case EntityType.ShotC2Big:
+		case EntityType.KidonShotC2Big:
 			if (entity.framesToStateChange !== KIDON_SHOT_C2_BIG_ACTIVE_FRAMES &&
 				(KIDON_SHOT_C2_BIG_ACTIVE_FRAMES - entity.framesToStateChange) % KIDON_SHOT_C2_SPAWN_INTERVAL_FRAMES === 0) {
 				for (let i = -1; i <= +1; i += 2) {
 					const spreadAngle = entity.angleInt + i * safeDiv(MAX_INT_ANGLE, 4);
-					const newEntity = {type: EntityType.ShotC2Small,
+					const newEntity = {type: EntityType.KidonShotC2Small,
 									   hp: 1, // TODO: Is this the right thing to put here?
 									   batt: 1, // TODO: Is this the right thing to put here?
 									   warp: 1, // TODO: Is this the right thing to put here?
@@ -814,8 +819,8 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 			if (--entity.framesToStateChange <= 0)
 				entity.shouldBeRemoved = true;
 			break;
-		case EntityType.ShotB1:
-		case EntityType.ShotB2:
+		case EntityType.KidonShotB1:
+		case EntityType.KidonShotB2:
 			if (--entity.framesToStateChange <= 0) {
 				if (entity.collisionSide !== CollisionSide.None) {
 					entity.collisionSide = CollisionSide.None;
@@ -825,10 +830,10 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 				}
 			}
 			break;
-		case EntityType.ShotA1:
-		case EntityType.ShotA2:
-		case EntityType.ShotC1Small:			
-		case EntityType.ShotC2Small:
+		case EntityType.KidonShotA1:
+		case EntityType.KidonShotA2:
+		case EntityType.KidonShotC1Small:			
+		case EntityType.KidonShotC2Small:
 			if (--entity.framesToStateChange <= 0)
 				entity.shouldBeRemoved = true;
 			break;
@@ -853,12 +858,12 @@ function turnToWantedAngle(src: Entity, dest: Entity, maxTurn: number) {
 
 function handleEntityMovement(entity: Entity, player1: Entity, player2: Entity) {
 	switch (entity.type) {
-		case EntityType.ShotA1:
-		case EntityType.ShotA2:
-			const activeFrames = entity.type === EntityType.ShotA1 ? KIDON_SHOT_A1_ACTIVE_FRAMES  : KIDON_SHOT_A2_ACTIVE_FRAMES;
-			const homingFrames = entity.type === EntityType.ShotA1 ? KIDON_SHOT_A1_HOMING_FRAMES  : KIDON_SHOT_A2_HOMING_FRAMES;
-			const turnPerFrame = entity.type === EntityType.ShotA1 ? KIDON_SHOT_A1_TURN_PER_FRAME : KIDON_SHOT_A2_TURN_PER_FRAME;
-			const speed        = entity.type === EntityType.ShotA1 ? KIDON_SHOT_A1_SPEED          : KIDON_SHOT_A2_SPEED;
+		case EntityType.KidonShotA1:
+		case EntityType.KidonShotA2:
+			const activeFrames = entity.type === EntityType.KidonShotA1 ? KIDON_SHOT_A1_ACTIVE_FRAMES  : KIDON_SHOT_A2_ACTIVE_FRAMES;
+			const homingFrames = entity.type === EntityType.KidonShotA1 ? KIDON_SHOT_A1_HOMING_FRAMES  : KIDON_SHOT_A2_HOMING_FRAMES;
+			const turnPerFrame = entity.type === EntityType.KidonShotA1 ? KIDON_SHOT_A1_TURN_PER_FRAME : KIDON_SHOT_A2_TURN_PER_FRAME;
+			const speed        = entity.type === EntityType.KidonShotA1 ? KIDON_SHOT_A1_SPEED          : KIDON_SHOT_A2_SPEED;
 			if (activeFrames - entity.framesToStateChange < homingFrames) {
 				const enemy = entity.collisionSide === CollisionSide.PlayerOne ? player2 : player1;
 				turnToWantedAngle(entity, enemy, turnPerFrame);
@@ -866,13 +871,13 @@ function handleEntityMovement(entity: Entity, player1: Entity, player2: Entity) 
 				entity.vy = safeSinMul(speed, entity.angleInt);
 			}
 			// fallthrough
-		case EntityType.ShotB1:
-		case EntityType.ShotB2:
-		case EntityType.ShotC1Big:
-		case EntityType.ShotC1Small:
-		case EntityType.ShotC2Big:
-		case EntityType.ShotC2Small:
-		case EntityType.Ship:
+		case EntityType.KidonShotB1:
+		case EntityType.KidonShotB2:
+		case EntityType.KidonShotC1Big:
+		case EntityType.KidonShotC1Small:
+		case EntityType.KidonShotC2Big:
+		case EntityType.KidonShotC2Small:
+		case EntityType.KidonShip:
 			entity.x += entity.vx;
 			entity.y += entity.vy;
 			break;
@@ -891,23 +896,23 @@ interface WallCollisionInfo {
 
 function getEntityTriangles(type: EntityType) {
 	switch (type) {
-		case EntityType.Ship:
+		case EntityType.KidonShip:
 			return KIDON_TRIANGLES;
-		case EntityType.ShotA1:
+		case EntityType.KidonShotA1:
 			return KIDON_SHOT_A1_TRIANGLES;
-		case EntityType.ShotA2:
+		case EntityType.KidonShotA2:
 			return KIDON_SHOT_A2_TRIANGLES;
-		case EntityType.ShotB2:
+		case EntityType.KidonShotB2:
 			return KIDON_SHOT_B2_TRIANGLES;
-		case EntityType.ShotB1:
+		case EntityType.KidonShotB1:
 			return KIDON_SHOT_B1_TRIANGLES;
-		case EntityType.ShotC1Big:
+		case EntityType.KidonShotC1Big:
 			return KIDON_SHOT_C1_BIG_TRIANGLES;
-		case EntityType.ShotC1Small:
+		case EntityType.KidonShotC1Small:
 			return KIDON_SHOT_C1_SMALL_TRIANGLES;
-		case EntityType.ShotC2Big:
+		case EntityType.KidonShotC2Big:
 			return KIDON_SHOT_C2_BIG_TRIANGLES;
-		case EntityType.ShotC2Small:
+		case EntityType.KidonShotC2Small:
 			return KIDON_SHOT_C2_SMALL_TRIANGLES;
 		default:
 			throw new Error("Unknown entity");			
@@ -937,7 +942,7 @@ function getWallCollisions(entity: Entity, collisionInfo: WallCollisionInfo): vo
 function handleWallCollisions(entity: Entity, wci: WallCollisionInfo) {
 	const state = getEntityState(entity);
 	switch (entity.type) {
-		case EntityType.Ship:
+		case EntityType.KidonShip:
 			if (wci.excessNegativeX > 0) {
 				entity.vx = -entity.vx;
 				entity.x += wci.excessNegativeX;
@@ -961,14 +966,14 @@ function handleWallCollisions(entity: Entity, wci: WallCollisionInfo) {
 				entity.hp -= WALL_DAMAGE;
 			}
 			break;
-		case EntityType.ShotA1:
-		case EntityType.ShotA2:
-		case EntityType.ShotB1:
-		case EntityType.ShotB2:
-		case EntityType.ShotC1Big:
-		case EntityType.ShotC1Small:
-		case EntityType.ShotC2Big:
-		case EntityType.ShotC2Small:
+		case EntityType.KidonShotA1:
+		case EntityType.KidonShotA2:
+		case EntityType.KidonShotB1:
+		case EntityType.KidonShotB2:
+		case EntityType.KidonShotC1Big:
+		case EntityType.KidonShotC1Small:
+		case EntityType.KidonShotC2Big:
+		case EntityType.KidonShotC2Small:
 			// TODO: Do nothing for now, in the future we should remove the shots from the game.
 			break;
 		default:
@@ -979,23 +984,23 @@ function handleWallCollisions(entity: Entity, wci: WallCollisionInfo) {
 // TODO: Lots of the collision related function here should be moved to spatial.ts
 function getEntityCoarseRadius(type: EntityType) {
 	switch (type) {
-		case EntityType.Ship:
+		case EntityType.KidonShip:
 			return KIDON_COARSE_RADIUS;
-		case EntityType.ShotA1:
+		case EntityType.KidonShotA1:
 			return KIDON_SHOT_A1_COARSE_RADIUS;
-		case EntityType.ShotA2:
+		case EntityType.KidonShotA2:
 			return KIDON_SHOT_A2_COARSE_RADIUS;
-		case EntityType.ShotB2:
+		case EntityType.KidonShotB2:
 			return KIDON_SHOT_B2_COARSE_RADIUS;
-		case EntityType.ShotB1:
+		case EntityType.KidonShotB1:
 			return KIDON_SHOT_B1_COARSE_RADIUS;
-		case EntityType.ShotC1Big:
+		case EntityType.KidonShotC1Big:
 			return KIDON_SHOT_C1_BIG_COARSE_RADIUS;
-		case EntityType.ShotC1Small:
+		case EntityType.KidonShotC1Small:
 			return KIDON_SHOT_C1_SMALL_COARSE_RADIUS;
-		case EntityType.ShotC2Big:
+		case EntityType.KidonShotC2Big:
 			return KIDON_SHOT_C2_BIG_COARSE_RADIUS;
-		case EntityType.ShotC2Small:
+		case EntityType.KidonShotC2Small:
 			return KIDON_SHOT_C2_SMALL_COARSE_RADIUS;
 		default:
 			throw new Error("getEntityCoarseRadius does not handle this");
@@ -1203,95 +1208,95 @@ function handleShipShipCollision(state: GameState, entity1: Entity, entity2: Ent
 
 const IS_DISAPPEAR_ON_HIT_MAP = (() => {
 	let map = new Map<EntityType, boolean>();
-	map.set(EntityType.ShotB1, true);
-	map.set(EntityType.ShotB2, true);
-	map.set(EntityType.ShotA1, true);
-	map.set(EntityType.ShotA2, true);
-	map.set(EntityType.ShotC1Big, true);
-	map.set(EntityType.ShotC1Small, true);
-	map.set(EntityType.ShotC2Big, true);
-	map.set(EntityType.ShotC2Small, true);
-	map.set(EntityType.Ship, false);
+	map.set(EntityType.KidonShotB1, true);
+	map.set(EntityType.KidonShotB2, true);
+	map.set(EntityType.KidonShotA1, true);
+	map.set(EntityType.KidonShotA2, true);
+	map.set(EntityType.KidonShotC1Big, true);
+	map.set(EntityType.KidonShotC1Small, true);
+	map.set(EntityType.KidonShotC2Big, true);
+	map.set(EntityType.KidonShotC2Small, true);
+	map.set(EntityType.KidonShip, false);
 	return map;
 })();
 assertDefinedForAllEnum(IS_DISAPPEAR_ON_HIT_MAP, EntityType);
 
 const ACCEL_ON_BLOCK_MAP =
-	new Map<EntityType, number>([[EntityType.ShotA1, KIDON_SHOT_A1_ACCEL_ON_BLOCK],
-								 [EntityType.ShotA2, KIDON_SHOT_A2_ACCEL_ON_BLOCK],
-								 [EntityType.ShotB2, KIDON_SHOT_B2_ACCEL_ON_BLOCK],
-								 [EntityType.ShotB1, KIDON_SHOT_B1_ACCEL_ON_BLOCK],
-								 [EntityType.ShotC1Big, KIDON_SHOT_C1_BIG_ACCEL_ON_BLOCK],
-								 [EntityType.ShotC1Small, KIDON_SHOT_C1_SMALL_ACCEL_ON_BLOCK],
-								 [EntityType.ShotC2Big, KIDON_SHOT_C2_BIG_ACCEL_ON_BLOCK],
-								 [EntityType.ShotC2Small, KIDON_SHOT_C2_SMALL_ACCEL_ON_BLOCK]]);
-assertDefinedForAllEnumExcept(ACCEL_ON_BLOCK_MAP, EntityType, new Set<EntityType>([EntityType.Ship]));
+	new Map<EntityType, number>([[EntityType.KidonShotA1, KIDON_SHOT_A1_ACCEL_ON_BLOCK],
+								 [EntityType.KidonShotA2, KIDON_SHOT_A2_ACCEL_ON_BLOCK],
+								 [EntityType.KidonShotB2, KIDON_SHOT_B2_ACCEL_ON_BLOCK],
+								 [EntityType.KidonShotB1, KIDON_SHOT_B1_ACCEL_ON_BLOCK],
+								 [EntityType.KidonShotC1Big, KIDON_SHOT_C1_BIG_ACCEL_ON_BLOCK],
+								 [EntityType.KidonShotC1Small, KIDON_SHOT_C1_SMALL_ACCEL_ON_BLOCK],
+								 [EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_ACCEL_ON_BLOCK],
+								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_ACCEL_ON_BLOCK]]);
+assertDefinedForAllEnumExcept(ACCEL_ON_BLOCK_MAP, EntityType, new Set<EntityType>([EntityType.KidonShip]));
 
 const ACCEL_ON_HIT_MAP =
-	new Map<EntityType, number>([[EntityType.ShotA1, KIDON_SHOT_A1_ACCEL_ON_HIT],
-								 [EntityType.ShotA2, KIDON_SHOT_A2_ACCEL_ON_HIT],
-								 [EntityType.ShotB2, KIDON_SHOT_B2_ACCEL_ON_HIT],
-								 [EntityType.ShotB1, KIDON_SHOT_B1_ACCEL_ON_HIT],
-								 [EntityType.ShotC1Big, KIDON_SHOT_C1_BIG_ACCEL_ON_HIT],
-								 [EntityType.ShotC1Small, KIDON_SHOT_C1_SMALL_ACCEL_ON_HIT],
-								 [EntityType.ShotC2Big, KIDON_SHOT_C2_BIG_ACCEL_ON_HIT],
-								 [EntityType.ShotC2Small, KIDON_SHOT_C2_SMALL_ACCEL_ON_HIT]]);
-assertDefinedForAllEnumExcept(ACCEL_ON_HIT_MAP, EntityType, new Set<EntityType>([EntityType.Ship]));
+	new Map<EntityType, number>([[EntityType.KidonShotA1, KIDON_SHOT_A1_ACCEL_ON_HIT],
+								 [EntityType.KidonShotA2, KIDON_SHOT_A2_ACCEL_ON_HIT],
+								 [EntityType.KidonShotB2, KIDON_SHOT_B2_ACCEL_ON_HIT],
+								 [EntityType.KidonShotB1, KIDON_SHOT_B1_ACCEL_ON_HIT],
+								 [EntityType.KidonShotC1Big, KIDON_SHOT_C1_BIG_ACCEL_ON_HIT],
+								 [EntityType.KidonShotC1Small, KIDON_SHOT_C1_SMALL_ACCEL_ON_HIT],
+								 [EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_ACCEL_ON_HIT],
+								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_ACCEL_ON_HIT]]);
+assertDefinedForAllEnumExcept(ACCEL_ON_HIT_MAP, EntityType, new Set<EntityType>([EntityType.KidonShip]));
 
 const BLOCKSTUN_FRAMES_MAP =
-	new Map<EntityType, number>([[EntityType.ShotA1, KIDON_SHOT_A1_BLOCKSTUN_FRAMES],
-								 [EntityType.ShotA2, KIDON_SHOT_A2_BLOCKSTUN_FRAMES],
-								 [EntityType.ShotB2, KIDON_SHOT_B2_BLOCKSTUN_FRAMES],
-								 [EntityType.ShotB1, KIDON_SHOT_B1_BLOCKSTUN_FRAMES],
-								 [EntityType.ShotC1Big, KIDON_SHOT_C1_BIG_BLOCKSTUN_FRAMES],
-								 [EntityType.ShotC1Small, KIDON_SHOT_C1_SMALL_BLOCKSTUN_FRAMES],
-								 [EntityType.ShotC2Big, KIDON_SHOT_C2_BIG_BLOCKSTUN_FRAMES],
-								 [EntityType.ShotC2Small, KIDON_SHOT_C2_SMALL_BLOCKSTUN_FRAMES]]);
-assertDefinedForAllEnumExcept(BLOCKSTUN_FRAMES_MAP, EntityType, new Set<EntityType>([EntityType.Ship]));
+	new Map<EntityType, number>([[EntityType.KidonShotA1, KIDON_SHOT_A1_BLOCKSTUN_FRAMES],
+								 [EntityType.KidonShotA2, KIDON_SHOT_A2_BLOCKSTUN_FRAMES],
+								 [EntityType.KidonShotB2, KIDON_SHOT_B2_BLOCKSTUN_FRAMES],
+								 [EntityType.KidonShotB1, KIDON_SHOT_B1_BLOCKSTUN_FRAMES],
+								 [EntityType.KidonShotC1Big, KIDON_SHOT_C1_BIG_BLOCKSTUN_FRAMES],
+								 [EntityType.KidonShotC1Small, KIDON_SHOT_C1_SMALL_BLOCKSTUN_FRAMES],
+								 [EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_BLOCKSTUN_FRAMES],
+								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_BLOCKSTUN_FRAMES]]);
+assertDefinedForAllEnumExcept(BLOCKSTUN_FRAMES_MAP, EntityType, new Set<EntityType>([EntityType.KidonShip]));
 
 const HITSTUN_FRAMES_MAP =
-	new Map<EntityType, number>([[EntityType.ShotA1, KIDON_SHOT_A1_HITSTUN_FRAMES],
-								 [EntityType.ShotA2, KIDON_SHOT_A2_HITSTUN_FRAMES],
-								 [EntityType.ShotB2, KIDON_SHOT_B2_HITSTUN_FRAMES],
-								 [EntityType.ShotB1, KIDON_SHOT_B1_HITSTUN_FRAMES],
-								 [EntityType.ShotC1Big, KIDON_SHOT_C1_BIG_HITSTUN_FRAMES],
-								 [EntityType.ShotC1Small, KIDON_SHOT_C1_SMALL_HITSTUN_FRAMES],
-								 [EntityType.ShotC2Big, KIDON_SHOT_C2_BIG_HITSTUN_FRAMES],
-								 [EntityType.ShotC2Small, KIDON_SHOT_C2_SMALL_HITSTUN_FRAMES]]);
-assertDefinedForAllEnumExcept(HITSTUN_FRAMES_MAP, EntityType, new Set<EntityType>([EntityType.Ship]));
+	new Map<EntityType, number>([[EntityType.KidonShotA1, KIDON_SHOT_A1_HITSTUN_FRAMES],
+								 [EntityType.KidonShotA2, KIDON_SHOT_A2_HITSTUN_FRAMES],
+								 [EntityType.KidonShotB2, KIDON_SHOT_B2_HITSTUN_FRAMES],
+								 [EntityType.KidonShotB1, KIDON_SHOT_B1_HITSTUN_FRAMES],
+								 [EntityType.KidonShotC1Big, KIDON_SHOT_C1_BIG_HITSTUN_FRAMES],
+								 [EntityType.KidonShotC1Small, KIDON_SHOT_C1_SMALL_HITSTUN_FRAMES],
+								 [EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_HITSTUN_FRAMES],
+								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_HITSTUN_FRAMES]]);
+assertDefinedForAllEnumExcept(HITSTUN_FRAMES_MAP, EntityType, new Set<EntityType>([EntityType.KidonShip]));
 
 const BLOCKED_DAMAGE_MAP =
-	new Map<EntityType, number>([[EntityType.ShotA1, KIDON_SHOT_A1_BLOCKED_DAMAGE],
-								 [EntityType.ShotA2, KIDON_SHOT_A2_BLOCKED_DAMAGE],
-								 [EntityType.ShotB2, KIDON_SHOT_B2_BLOCKED_DAMAGE],
-								 [EntityType.ShotB1, KIDON_SHOT_B1_BLOCKED_DAMAGE],
-								 [EntityType.ShotC1Big, KIDON_SHOT_C1_BIG_BLOCKED_DAMAGE],
-								 [EntityType.ShotC1Small, KIDON_SHOT_C1_SMALL_BLOCKED_DAMAGE],
-								 [EntityType.ShotC2Big, KIDON_SHOT_C2_BIG_BLOCKED_DAMAGE],
-								 [EntityType.ShotC2Small, KIDON_SHOT_C2_SMALL_BLOCKED_DAMAGE]]);
-assertDefinedForAllEnumExcept(BLOCKED_DAMAGE_MAP, EntityType, new Set<EntityType>([EntityType.Ship]));
+	new Map<EntityType, number>([[EntityType.KidonShotA1, KIDON_SHOT_A1_BLOCKED_DAMAGE],
+								 [EntityType.KidonShotA2, KIDON_SHOT_A2_BLOCKED_DAMAGE],
+								 [EntityType.KidonShotB2, KIDON_SHOT_B2_BLOCKED_DAMAGE],
+								 [EntityType.KidonShotB1, KIDON_SHOT_B1_BLOCKED_DAMAGE],
+								 [EntityType.KidonShotC1Big, KIDON_SHOT_C1_BIG_BLOCKED_DAMAGE],
+								 [EntityType.KidonShotC1Small, KIDON_SHOT_C1_SMALL_BLOCKED_DAMAGE],
+								 [EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_BLOCKED_DAMAGE],
+								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_BLOCKED_DAMAGE]]);
+assertDefinedForAllEnumExcept(BLOCKED_DAMAGE_MAP, EntityType, new Set<EntityType>([EntityType.KidonShip]));
 
 const HIT_DAMAGE_MAP =
-	new Map<EntityType, number>([[EntityType.ShotA1, KIDON_SHOT_A1_HIT_DAMAGE],
-								 [EntityType.ShotA2, KIDON_SHOT_A2_HIT_DAMAGE],
-								 [EntityType.ShotB2, KIDON_SHOT_B2_HIT_DAMAGE],
-								 [EntityType.ShotB1, KIDON_SHOT_B1_HIT_DAMAGE],
-								 [EntityType.ShotC1Big, KIDON_SHOT_C1_BIG_HIT_DAMAGE],
-								 [EntityType.ShotC1Small, KIDON_SHOT_C1_SMALL_HIT_DAMAGE],
-								 [EntityType.ShotC2Big, KIDON_SHOT_C2_BIG_HIT_DAMAGE],
-								 [EntityType.ShotC2Small, KIDON_SHOT_C2_SMALL_HIT_DAMAGE]]);
-assertDefinedForAllEnumExcept(HIT_DAMAGE_MAP, EntityType, new Set<EntityType>([EntityType.Ship]));
+	new Map<EntityType, number>([[EntityType.KidonShotA1, KIDON_SHOT_A1_HIT_DAMAGE],
+								 [EntityType.KidonShotA2, KIDON_SHOT_A2_HIT_DAMAGE],
+								 [EntityType.KidonShotB2, KIDON_SHOT_B2_HIT_DAMAGE],
+								 [EntityType.KidonShotB1, KIDON_SHOT_B1_HIT_DAMAGE],
+								 [EntityType.KidonShotC1Big, KIDON_SHOT_C1_BIG_HIT_DAMAGE],
+								 [EntityType.KidonShotC1Small, KIDON_SHOT_C1_SMALL_HIT_DAMAGE],
+								 [EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_HIT_DAMAGE],
+								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_HIT_DAMAGE]]);
+assertDefinedForAllEnumExcept(HIT_DAMAGE_MAP, EntityType, new Set<EntityType>([EntityType.KidonShip]));
 
 const SHOT_DISAPPEARS_ON_IMPACT_MAP =
-	new Map<EntityType, boolean>([[EntityType.ShotA1, true],
-								  [EntityType.ShotA2, true],
-								  [EntityType.ShotB2, false],
-								  [EntityType.ShotB1, false],
-								  [EntityType.ShotC1Big, true],
-								  [EntityType.ShotC1Small, true],
-								  [EntityType.ShotC2Big, true],
-								  [EntityType.ShotC2Small, true]]);
-assertDefinedForAllEnumExcept(SHOT_DISAPPEARS_ON_IMPACT_MAP, EntityType, new Set<EntityType>([EntityType.Ship]));
+	new Map<EntityType, boolean>([[EntityType.KidonShotA1, true],
+								  [EntityType.KidonShotA2, true],
+								  [EntityType.KidonShotB2, false],
+								  [EntityType.KidonShotB1, false],
+								  [EntityType.KidonShotC1Big, true],
+								  [EntityType.KidonShotC1Small, true],
+								  [EntityType.KidonShotC2Big, true],
+								  [EntityType.KidonShotC2Small, true]]);
+assertDefinedForAllEnumExcept(SHOT_DISAPPEARS_ON_IMPACT_MAP, EntityType, new Set<EntityType>([EntityType.KidonShip]));
 
 function handleShipShotCollision(state: GameState, ship: Entity, shot: Entity) {
 	const angle = shot.angleInt;
@@ -1361,69 +1366,69 @@ function handleImpossibleCollision(state: GameState, shotB: Entity, shotA: Entit
 type CollisionHandler = { (state: GameState, x: Entity, y: Entity): void; };
 const COLLISION_HANDLER_MAP = (() => {
 	let map = new Map<EntityType, Map<EntityType, CollisionHandler>>();
-	let shipMap = new Map<EntityType, CollisionHandler>();
-	shipMap.set(EntityType.Ship, handleShipShipCollision);
-	shipMap.set(EntityType.ShotA1, handleShipShotCollision);
-	shipMap.set(EntityType.ShotA2, handleShipShotCollision);
-	shipMap.set(EntityType.ShotB1, handleShipShotCollision);
-	shipMap.set(EntityType.ShotB2, handleShipShotCollision);
-	shipMap.set(EntityType.ShotC1Big, handleShipShotCollision);
-	shipMap.set(EntityType.ShotC1Small, handleShipShotCollision);
-	shipMap.set(EntityType.ShotC2Big, handleShipShotCollision);
-	shipMap.set(EntityType.ShotC2Small, handleShipShotCollision);
-	map.set(EntityType.Ship, shipMap);
-	let shotA1Map = new Map<EntityType, CollisionHandler>();
-	shotA1Map.set(EntityType.ShotA1, handleShotAShotACollision);
-	shotA1Map.set(EntityType.ShotA2, handleShotAShotACollision);
-	shotA1Map.set(EntityType.ShotB1, handleShotAShotBCollision);
-	shotA1Map.set(EntityType.ShotB2, handleShotAShotBCollision);
-	shotA1Map.set(EntityType.ShotC1Big, handleShotAShotACollision);
-	shotA1Map.set(EntityType.ShotC1Small, handleShotAShotACollision);
-	shotA1Map.set(EntityType.ShotC2Big, handleShotAShotACollision);
-	shotA1Map.set(EntityType.ShotC2Small, handleShotAShotACollision);
-	map.set(EntityType.ShotA1, shotA1Map);
-	let shotA2Map = new Map<EntityType, CollisionHandler>();
-	shotA2Map.set(EntityType.ShotA2, handleShotAShotACollision);
-	shotA2Map.set(EntityType.ShotB1, handleShotAShotBCollision);
-	shotA2Map.set(EntityType.ShotB2, handleShotAShotBCollision);
-	shotA2Map.set(EntityType.ShotC1Big, handleShotAShotACollision);
-	shotA2Map.set(EntityType.ShotC1Small, handleShotAShotACollision);
-	shotA2Map.set(EntityType.ShotC2Big, handleShotAShotACollision);
-	shotA2Map.set(EntityType.ShotC2Small, handleShotAShotACollision);
-	map.set(EntityType.ShotA2, shotA2Map);
-	let shotB1Map = new Map<EntityType, CollisionHandler>();
-	shotB1Map.set(EntityType.ShotB1, handleShotAShotACollision);
-	shotB1Map.set(EntityType.ShotB2, handleShotAShotACollision);
-	shotB1Map.set(EntityType.ShotC1Big, handleShotBShotACollision);
-	shotB1Map.set(EntityType.ShotC1Small, handleShotBShotACollision);
-	shotB1Map.set(EntityType.ShotC2Big, handleShotBShotACollision);
-	shotB1Map.set(EntityType.ShotC2Small, handleShotBShotACollision);
-	map.set(EntityType.ShotB1, shotB1Map);
-	let shotB2Map = new Map<EntityType, CollisionHandler>();
-	shotB2Map.set(EntityType.ShotB2, handleShotAShotACollision);
-	shotB2Map.set(EntityType.ShotC1Big, handleShotBShotACollision);
-	shotB2Map.set(EntityType.ShotC1Small, handleShotBShotACollision);
-	shotB2Map.set(EntityType.ShotC2Big, handleShotBShotACollision);
-	shotB2Map.set(EntityType.ShotC2Small, handleShotBShotACollision);
-	map.set(EntityType.ShotB2, shotB2Map);
-	let shotC1BigMap = new Map<EntityType, CollisionHandler>();
-	shotC1BigMap.set(EntityType.ShotC1Big, handleShotAShotACollision);
-	shotC1BigMap.set(EntityType.ShotC1Small, handleShotAShotACollision);
-	shotC1BigMap.set(EntityType.ShotC2Big, handleShotAShotACollision);
-	shotC1BigMap.set(EntityType.ShotC2Small, handleShotAShotACollision);
-	map.set(EntityType.ShotC1Big, shotC1BigMap);
-	let shotC1SmallMap = new Map<EntityType, CollisionHandler>();
-	shotC1SmallMap.set(EntityType.ShotC1Small, handleShotAShotACollision);
-	shotC1SmallMap.set(EntityType.ShotC2Big, handleShotAShotACollision);
-	shotC1SmallMap.set(EntityType.ShotC2Small, handleShotAShotACollision);
-	map.set(EntityType.ShotC1Small, shotC1SmallMap);
-	let shotC2BigMap = new Map<EntityType, CollisionHandler>();
-	shotC2BigMap.set(EntityType.ShotC2Big, handleShotAShotACollision);
-	shotC2BigMap.set(EntityType.ShotC2Small, handleShotAShotACollision);
-	map.set(EntityType.ShotC2Big, shotC2BigMap);
-	let shotC2SmallMap = new Map<EntityType, CollisionHandler>();
-	shotC2SmallMap.set(EntityType.ShotC2Small, handleShotAShotACollision);
-	map.set(EntityType.ShotC2Small, shotC2SmallMap);
+	let kidonMap = new Map<EntityType, CollisionHandler>();
+	kidonMap.set(EntityType.KidonShip, handleShipShipCollision);
+	kidonMap.set(EntityType.KidonShotA1, handleShipShotCollision);
+	kidonMap.set(EntityType.KidonShotA2, handleShipShotCollision);
+	kidonMap.set(EntityType.KidonShotB1, handleShipShotCollision);
+	kidonMap.set(EntityType.KidonShotB2, handleShipShotCollision);
+	kidonMap.set(EntityType.KidonShotC1Big, handleShipShotCollision);
+	kidonMap.set(EntityType.KidonShotC1Small, handleShipShotCollision);
+	kidonMap.set(EntityType.KidonShotC2Big, handleShipShotCollision);
+	kidonMap.set(EntityType.KidonShotC2Small, handleShipShotCollision);
+	map.set(EntityType.KidonShip, kidonMap);
+	let kidonShotA1Map = new Map<EntityType, CollisionHandler>();
+	kidonShotA1Map.set(EntityType.KidonShotA1, handleShotAShotACollision);
+	kidonShotA1Map.set(EntityType.KidonShotA2, handleShotAShotACollision);
+	kidonShotA1Map.set(EntityType.KidonShotB1, handleShotAShotBCollision);
+	kidonShotA1Map.set(EntityType.KidonShotB2, handleShotAShotBCollision);
+	kidonShotA1Map.set(EntityType.KidonShotC1Big, handleShotAShotACollision);
+	kidonShotA1Map.set(EntityType.KidonShotC1Small, handleShotAShotACollision);
+	kidonShotA1Map.set(EntityType.KidonShotC2Big, handleShotAShotACollision);
+	kidonShotA1Map.set(EntityType.KidonShotC2Small, handleShotAShotACollision);
+	map.set(EntityType.KidonShotA1, kidonShotA1Map);
+	let kidonShotA2Map = new Map<EntityType, CollisionHandler>();
+	kidonShotA2Map.set(EntityType.KidonShotA2, handleShotAShotACollision);
+	kidonShotA2Map.set(EntityType.KidonShotB1, handleShotAShotBCollision);
+	kidonShotA2Map.set(EntityType.KidonShotB2, handleShotAShotBCollision);
+	kidonShotA2Map.set(EntityType.KidonShotC1Big, handleShotAShotACollision);
+	kidonShotA2Map.set(EntityType.KidonShotC1Small, handleShotAShotACollision);
+	kidonShotA2Map.set(EntityType.KidonShotC2Big, handleShotAShotACollision);
+	kidonShotA2Map.set(EntityType.KidonShotC2Small, handleShotAShotACollision);
+	map.set(EntityType.KidonShotA2, kidonShotA2Map);
+	let kidonShotB1Map = new Map<EntityType, CollisionHandler>();
+	kidonShotB1Map.set(EntityType.KidonShotB1, handleShotAShotACollision);
+	kidonShotB1Map.set(EntityType.KidonShotB2, handleShotAShotACollision);
+	kidonShotB1Map.set(EntityType.KidonShotC1Big, handleShotBShotACollision);
+	kidonShotB1Map.set(EntityType.KidonShotC1Small, handleShotBShotACollision);
+	kidonShotB1Map.set(EntityType.KidonShotC2Big, handleShotBShotACollision);
+	kidonShotB1Map.set(EntityType.KidonShotC2Small, handleShotBShotACollision);
+	map.set(EntityType.KidonShotB1, kidonShotB1Map);
+	let kidonShotB2Map = new Map<EntityType, CollisionHandler>();
+	kidonShotB2Map.set(EntityType.KidonShotB2, handleShotAShotACollision);
+	kidonShotB2Map.set(EntityType.KidonShotC1Big, handleShotBShotACollision);
+	kidonShotB2Map.set(EntityType.KidonShotC1Small, handleShotBShotACollision);
+	kidonShotB2Map.set(EntityType.KidonShotC2Big, handleShotBShotACollision);
+	kidonShotB2Map.set(EntityType.KidonShotC2Small, handleShotBShotACollision);
+	map.set(EntityType.KidonShotB2, kidonShotB2Map);
+	let kidonShotC1BigMap = new Map<EntityType, CollisionHandler>();
+	kidonShotC1BigMap.set(EntityType.KidonShotC1Big, handleShotAShotACollision);
+	kidonShotC1BigMap.set(EntityType.KidonShotC1Small, handleShotAShotACollision);
+	kidonShotC1BigMap.set(EntityType.KidonShotC2Big, handleShotAShotACollision);
+	kidonShotC1BigMap.set(EntityType.KidonShotC2Small, handleShotAShotACollision);
+	map.set(EntityType.KidonShotC1Big, kidonShotC1BigMap);
+	let kidonShotC1SmallMap = new Map<EntityType, CollisionHandler>();
+	kidonShotC1SmallMap.set(EntityType.KidonShotC1Small, handleShotAShotACollision);
+	kidonShotC1SmallMap.set(EntityType.KidonShotC2Big, handleShotAShotACollision);
+	kidonShotC1SmallMap.set(EntityType.KidonShotC2Small, handleShotAShotACollision);
+	map.set(EntityType.KidonShotC1Small, kidonShotC1SmallMap);
+	let kidonShotC2BigMap = new Map<EntityType, CollisionHandler>();
+	kidonShotC2BigMap.set(EntityType.KidonShotC2Big, handleShotAShotACollision);
+	kidonShotC2BigMap.set(EntityType.KidonShotC2Small, handleShotAShotACollision);
+	map.set(EntityType.KidonShotC2Big, kidonShotC2BigMap);
+	let kidonShotC2SmallMap = new Map<EntityType, CollisionHandler>();
+	kidonShotC2SmallMap.set(EntityType.KidonShotC2Small, handleShotAShotACollision);
+	map.set(EntityType.KidonShotC2Small, kidonShotC2SmallMap);
 	return map;
 })();
 for (const value1 in EntityType) {
@@ -1520,7 +1525,7 @@ function createExplosionParticles(damage: number, x: number, y: number, state: G
 }
 
 function initialEntities(): Entity[] {
-	return [{type: EntityType.Ship,
+	return [{type: EntityType.KidonShip,
 			 hp: KIDON_MAX_HP,
 			 batt: 0,
 			 warp: 0,
@@ -1538,7 +1543,7 @@ function initialEntities(): Entity[] {
 			 noStablizeFrames: 0,
 			 color: EntityColor.Red,
 			 shouldBeRemoved: false},
-			{type: EntityType.Ship,
+			{type: EntityType.KidonShip,
 			 hp: KIDON_MAX_HP,
 			 batt: 0,
 			 warp: 0,
@@ -1625,19 +1630,19 @@ function removeRenderables(state: GameState) {
 }
 
 export function getMaxHp(type: EntityType) {
-	if (type === EntityType.Ship)
+	if (type === EntityType.KidonShip)
 		return KIDON_MAX_HP;
 	throw new Error("getMaxHp for unknown");
 }
 
 export function getMaxBatt(type: EntityType) {
-	if (type === EntityType.Ship)
+	if (type === EntityType.KidonShip)
 		return KIDON_MAX_BATT;
 	throw new Error("getMaxBatt for unknown");
 }
 
 export function getMaxWarp(type: EntityType) {
-	if (type === EntityType.Ship)
+	if (type === EntityType.KidonShip)
 		return KIDON_MAX_WARP;
 	throw new Error("getMaxWarp for unknown");
 }
@@ -1688,9 +1693,9 @@ export function updateGameState(state: GameState, inputs: number[], winningSyncD
 
 export function getFadeFrames(type: EntityType) {
 	switch (type) {
-		case EntityType.ShotB1:
+		case EntityType.KidonShotB1:
 			return KIDON_SHOT_B1_FADE_FRAMES;
-		case EntityType.ShotB2:
+		case EntityType.KidonShotB2:
 			return KIDON_SHOT_B2_FADE_FRAMES;
 		default:
 			throw new Error("getFadeFrames - unknown");

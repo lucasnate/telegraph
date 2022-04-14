@@ -370,15 +370,15 @@ function getAfterImageColor(renderable: Renderable, color1: Color, color2: Color
 
 const ENTITY_COLOR_HANDLER_MAP = (() => {
 	let map = new Map<EntityType, EntityColorHandler>();
-	map.set(EntityType.Ship, getShipColor);
-	map.set(EntityType.ShotA1, getShotColor);
-	map.set(EntityType.ShotA2, getShotColor);
-	map.set(EntityType.ShotB1, getLaserShotColor);
-	map.set(EntityType.ShotB2, getLaserShotColor);
-	map.set(EntityType.ShotC1Big, getShotColor);
-	map.set(EntityType.ShotC1Small, getShotColor);
-	map.set(EntityType.ShotC2Big, getShotColor);
-	map.set(EntityType.ShotC2Small, getShotColor);
+	map.set(EntityType.KidonShip, getShipColor);
+	map.set(EntityType.KidonShotA1, getShotColor);
+	map.set(EntityType.KidonShotA2, getShotColor);
+	map.set(EntityType.KidonShotB1, getLaserShotColor);
+	map.set(EntityType.KidonShotB2, getLaserShotColor);
+	map.set(EntityType.KidonShotC1Big, getShotColor);
+	map.set(EntityType.KidonShotC1Small, getShotColor);
+	map.set(EntityType.KidonShotC2Big, getShotColor);
+	map.set(EntityType.KidonShotC2Small, getShotColor);
 	return map;
 })();
 
@@ -540,15 +540,15 @@ export class Renderer {
 	createBuffers(): Buffers  {
 		const kidonTrianglesBuf = this.bufferWithCount(KIDON_TRIANGLES);
 		const particleBuf = this.bufferWithCount(PARTICLE_TRIANGLES);
-		let map1 = new Map([[EntityType.Ship, kidonTrianglesBuf],
-							[EntityType.ShotA1, this.bufferWithCount(KIDON_SHOT_A1_TRIANGLES)],
-							[EntityType.ShotA2, this.bufferWithCount(KIDON_SHOT_A2_TRIANGLES)],
-							[EntityType.ShotB1, this.bufferWithCount(KIDON_SHOT_B1_TRIANGLES)],
-							[EntityType.ShotB2, this.bufferWithCount(KIDON_SHOT_B2_TRIANGLES)],
-							[EntityType.ShotC1Big, this.bufferWithCount(KIDON_SHOT_C1_BIG_TRIANGLES)],
-							[EntityType.ShotC1Small, this.bufferWithCount(KIDON_SHOT_C1_SMALL_TRIANGLES)],
-							[EntityType.ShotC2Big, this.bufferWithCount(KIDON_SHOT_C2_BIG_TRIANGLES)],
-							[EntityType.ShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES)]]);
+		let map1 = new Map([[EntityType.KidonShip, kidonTrianglesBuf],
+							[EntityType.KidonShotA1, this.bufferWithCount(KIDON_SHOT_A1_TRIANGLES)],
+							[EntityType.KidonShotA2, this.bufferWithCount(KIDON_SHOT_A2_TRIANGLES)],
+							[EntityType.KidonShotB1, this.bufferWithCount(KIDON_SHOT_B1_TRIANGLES)],
+							[EntityType.KidonShotB2, this.bufferWithCount(KIDON_SHOT_B2_TRIANGLES)],
+							[EntityType.KidonShotC1Big, this.bufferWithCount(KIDON_SHOT_C1_BIG_TRIANGLES)],
+							[EntityType.KidonShotC1Small, this.bufferWithCount(KIDON_SHOT_C1_SMALL_TRIANGLES)],
+							[EntityType.KidonShotC2Big, this.bufferWithCount(KIDON_SHOT_C2_BIG_TRIANGLES)],
+							[EntityType.KidonShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES)]]);
 		let map2 = new Map([[RenderableType.ThrustParticle, particleBuf],
 							[RenderableType.RedExplosionParticle, particleBuf],
 							[RenderableType.BlueExplosionParticle, particleBuf],
