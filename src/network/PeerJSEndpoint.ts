@@ -90,7 +90,7 @@ export class PeerJSEndpoint {
   private shutdownTime = 0;
 
   private nextSendSeq = 0;
-  private nextRecvSeq = 0;
+  private lastRecvSeq = 0;
 
   // timesync stuff
   private localFrameAdvantage = 0;
@@ -458,7 +458,12 @@ export class PeerJSEndpoint {
     // TODO: drop wildly out of order packets here?
 
     const seq = msg.sequenceNumber;
-    this.nextRecvSeq = seq;
+
+	  if (this.lastRecvSeq > seq) {
+		  // Drop out-of-order packets
+		  return null;
+	  }
+	  this.lastRecvSeq = seq;
 
       if (seq <= this.stateDetail.dataSync.receivedFirstPartSeq) {
 		  // ignore messages that are from before we did reset
