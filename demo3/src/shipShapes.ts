@@ -1,10 +1,15 @@
 // TODO: This file needs to have float protection
 
 import { safeCosMul, safeSinMul, safeDiv, MAX_INT_ANGLE } from './safeCalc';
-import { getCoarseSquare, getCoarseRadius, Point, rotateAndTranslate } from './spatial';
+import { getCoarseSquare, getCoarseRadius, Point, rotateAndTranslate, ShapeInfo, ShapeInfoType } from './spatial';
+import { assert } from '../../src/util/assert';
 
 export const KIDON_WIDTH = 3500;
 export const KIDON_HEIGHT = 3500;
+
+function triangles(data: number[]) {
+	return {type: ShapeInfoType.Triangles, data: data};
+}
 
 const KIDON_BIG_TRIANGLE = [
 	safeDiv(KIDON_WIDTH * -2, 10), safeDiv(KIDON_HEIGHT * -3, 6),
@@ -31,7 +36,7 @@ const KIDON_CONNECTOR_TRIANGLE2 = [
 	-KIDON_CONNECTOR_TRIANGLE1[2], KIDON_CONNECTOR_TRIANGLE1[3],
 	-KIDON_CONNECTOR_TRIANGLE1[4], KIDON_CONNECTOR_TRIANGLE1[5],		
 ];
-export const KIDON_TRIANGLES = (() => {
+export const KIDON_TRIANGLES = triangles((() => {
 	let pt: Point = {x: 0, y: 0};
 	let toRotate = KIDON_BIG_TRIANGLE
  		.concat(KIDON_SMALL_TRIANGLE1)
@@ -46,16 +51,16 @@ export const KIDON_TRIANGLES = (() => {
 		toRotate[i+1] = pt.y;
 	}
 	return toRotate;
-})();// [0,+safeDiv(KIDON_HEIGHT,2),-100,-safeDiv(KIDON_HEIGHT,2),+100,-safeDiv(KIDON_HEIGHT,2)];
+})());
 export const KIDON_COARSE_RECT = getCoarseSquare(KIDON_TRIANGLES);
 export const KIDON_COARSE_RADIUS = getCoarseRadius(KIDON_TRIANGLES);
 
 function makeKidonShotTriangles(width: number, height: number) {
-	return [
+	return triangles([
 		+safeDiv(width, 2), 0,
 		-safeDiv(width, 2), +safeDiv(height, 2),
 		-safeDiv(width, 2), -safeDiv(height, 2)
-	];
+	]);
 }
 
 export const KIDON_SHOT_A1_WIDTH = safeDiv(KIDON_WIDTH, 2)
@@ -69,14 +74,14 @@ export const KIDON_SHOT_A2_TRIANGLES = makeKidonShotTriangles(KIDON_SHOT_A2_WIDT
 export const KIDON_SHOT_A2_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_A2_TRIANGLES);
 
 function makeLaserTriangles(width: number, height: number) {
-	return [
+	return triangles([
 		0,     +safeDiv(height, 2),
 		0,     -safeDiv(height, 2),
 		width, +safeDiv(height, 2),
 		width, +safeDiv(height, 2),
 		width, -safeDiv(height, 2),
 		0,     -safeDiv(height, 2)
-	];
+	]);
 }
 
 export const KIDON_SHOT_B2_WIDTH = KIDON_WIDTH * 8;
@@ -117,3 +122,28 @@ export const PARTICLE_TRIANGLES = [
 	0, +200,
 	-200, 0
 ];
+
+function makeCircleTriangles(radius: number, count: number) {
+	const ret = [];
+	for (let i = 0; i < count; ++i) {
+		ret.push(0, 0,
+				 safeCosMul(radius, safeDiv(MAX_INT_ANGLE * i, count)),
+				 safeSinMul(radius, safeDiv(MAX_INT_ANGLE * i, count)),
+				 safeCosMul(radius, safeDiv(MAX_INT_ANGLE * (i + 1), count)),
+				 safeSinMul(radius, safeDiv(MAX_INT_ANGLE * (i + 1), count)));
+	}
+	return triangles(ret);
+}
+
+export const AYIN_WIDTH = 4000;
+export const AYIN_HEIGHT = 4000;
+assert(AYIN_HEIGHT === AYIN_WIDTH, "Ayin is a circle, so width and height must be the same");
+export const AYIN_RENDER_TRIANGLES = makeCircleTriangles(safeDiv(AYIN_WIDTH, 2), 20);
+export const AYIN_PUPIL_TRIANGLES = (() => {
+	const ret = makeCircleTriangles(safeDiv(AYIN_WIDTH, 2 * 3.54), 10);
+	for (let i = 0, l = ret.data.length; i < l; i += 2)
+		ret.data[i] += safeDiv(AYIN_WIDTH * 3, 2 * 5);
+	return ret;
+})();
+export const AYIN_SHAPE = {type: ShapeInfoType.Circles, data: [0, 0, safeDiv(AYIN_WIDTH, 2)]};
+export const AYIN_COARSE_RADIUS = getCoarseRadius(AYIN_SHAPE);

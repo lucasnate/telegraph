@@ -1,7 +1,11 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
-import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, PLAYER1_INDEX, PLAYER2_INDEX, Entity, EntityType, Renderable, RenderableType, EntityState, EntityColor, getMaxHp, getMaxBatt, getMaxWarp, WinScreen, assertDefinedForAllEnum, getEntityState, getFadeFrames, THRUST_FRAMES, CollisionSide, WARP_AFTER_IMAGE_TTL_FRAMES } from './GameState';
+import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, Renderable, RenderableType, WinScreen, assertDefinedForAllEnum, getFadeFrames, THRUST_FRAMES, WARP_AFTER_IMAGE_TTL_FRAMES } from './GameState';
 import { MAX_INT_ANGLE, max, min } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES } from './shipShapes';
+import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES, AYIN_RENDER_TRIANGLES, AYIN_PUPIL_TRIANGLES } from './shipShapes';
+import { Entity, EntityType, EntityState, EntityColor, CollisionSide } from './Entity';
+import { shipInfos } from './shipInfos';
+import { assert } from '../../src/util/assert';
+import { PLAYER1_INDEX, PLAYER2_INDEX, getEntityState } from './gameUtil';
 
 // Vertex shader program
 const VERTEX_SHADER_SOURCE = `
@@ -39,6 +43,11 @@ void main() {
     }
 }
 `
+
+enum AttachedType {
+	Pupil
+}
+
 interface Color {
 	r: number;
 	g: number;
@@ -66,16 +75,18 @@ interface ProgramInfo {
 type BufferWithCount = { buffer: WebGLBuffer, count: number };
 type EntityBufferMap = Map<EntityType, BufferWithCount>;
 type RenderableBufferMap = Map<RenderableType, BufferWithCount>;
+type AttachedBufferMap = Map<AttachedType, BufferWithCount>;
 
 interface Buffers {
 	entityBuffers: EntityBufferMap;
 	renderableBuffers: RenderableBufferMap;
+	attachedBuffers: AttachedBufferMap;
 	grid: BufferWithCount;
 	stars: BufferWithCount;
 	margin: BufferWithCount;
 };
 
-let debug = 200;
+let debug = 0;
 
 const GRID_COUNT = 21;
 const GRID_LINES = (() => {
@@ -246,6 +257,7 @@ function getWarpShipColor(entity: Entity, color1: Color, color2: Color, color3: 
 }
 
 type EntityColorHandler = { (x: Entity, color1: Color, color2: Color, color3: Color): void };
+type AttachedColorHandler = { (x: AttachedType, color1: Color, color2: Color, color3: Color): void };
 type RenderableColorHandler = { (x: Renderable, color1: Color, color2: Color, color3: Color): void };
 const SHIP_COLOR_HANDLER_MAP = (() => {
 	let map = new Map<EntityState, EntityColorHandler>();
@@ -379,8 +391,17 @@ const ENTITY_COLOR_HANDLER_MAP = (() => {
 	map.set(EntityType.KidonShotC1Small, getShotColor);
 	map.set(EntityType.KidonShotC2Big, getShotColor);
 	map.set(EntityType.KidonShotC2Small, getShotColor);
+
+	map.set(EntityType.AyinShip, getShipColor);
 	return map;
 })();
+
+function getPupilColor(type: AttachedType, color1: Color, color2: Color, color3: Color): void {
+	color1.r = color2.r = color3.r = color1.g = color2.g = color3.g = color1.b = color2.b = color3.b = 0;
+}
+
+const ATTACHED_COLOR_HANDLER_MAP = new Map<AttachedType, AttachedColorHandler>(
+	[[AttachedType.Pupil, getPupilColor]]);
 
 const RENDERABLE_COLOR_HANDLER_MAP = new Map<RenderableType, RenderableColorHandler>(
 	[[RenderableType.ThrustParticle, getParticleColor],
@@ -393,6 +414,10 @@ assertDefinedForAllEnum(ENTITY_COLOR_HANDLER_MAP, EntityType);
 
 function getEntityColor(entity: Entity, color1: Color, color2: Color, color3: Color) {
 	return ENTITY_COLOR_HANDLER_MAP.get(entity.type)!(entity, color1, color2, color3);
+}
+
+function getAttachedColor(type: AttachedType, color1: Color, color2: Color, color3: Color) {
+	return ATTACHED_COLOR_HANDLER_MAP.get(type)!(type, color1, color2, color3);
 }
 
 function getRenderableColor(renderable: Renderable, color1: Color, color2: Color, color3: Color) {
@@ -538,17 +563,18 @@ export class Renderer {
 	}
 
 	createBuffers(): Buffers  {
-		const kidonTrianglesBuf = this.bufferWithCount(KIDON_TRIANGLES);
+		const kidonTrianglesBuf = this.bufferWithCount(KIDON_TRIANGLES.data);
 		const particleBuf = this.bufferWithCount(PARTICLE_TRIANGLES);
 		let map1 = new Map([[EntityType.KidonShip, kidonTrianglesBuf],
-							[EntityType.KidonShotA1, this.bufferWithCount(KIDON_SHOT_A1_TRIANGLES)],
-							[EntityType.KidonShotA2, this.bufferWithCount(KIDON_SHOT_A2_TRIANGLES)],
-							[EntityType.KidonShotB1, this.bufferWithCount(KIDON_SHOT_B1_TRIANGLES)],
-							[EntityType.KidonShotB2, this.bufferWithCount(KIDON_SHOT_B2_TRIANGLES)],
-							[EntityType.KidonShotC1Big, this.bufferWithCount(KIDON_SHOT_C1_BIG_TRIANGLES)],
-							[EntityType.KidonShotC1Small, this.bufferWithCount(KIDON_SHOT_C1_SMALL_TRIANGLES)],
-							[EntityType.KidonShotC2Big, this.bufferWithCount(KIDON_SHOT_C2_BIG_TRIANGLES)],
-							[EntityType.KidonShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES)]]);
+							[EntityType.KidonShotA1, this.bufferWithCount(KIDON_SHOT_A1_TRIANGLES.data)],
+							[EntityType.KidonShotA2, this.bufferWithCount(KIDON_SHOT_A2_TRIANGLES.data)],
+							[EntityType.KidonShotB1, this.bufferWithCount(KIDON_SHOT_B1_TRIANGLES.data)],
+							[EntityType.KidonShotB2, this.bufferWithCount(KIDON_SHOT_B2_TRIANGLES.data)],
+							[EntityType.KidonShotC1Big, this.bufferWithCount(KIDON_SHOT_C1_BIG_TRIANGLES.data)],
+							[EntityType.KidonShotC1Small, this.bufferWithCount(KIDON_SHOT_C1_SMALL_TRIANGLES.data)],
+							[EntityType.KidonShotC2Big, this.bufferWithCount(KIDON_SHOT_C2_BIG_TRIANGLES.data)],
+							[EntityType.KidonShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES.data)],
+							[EntityType.AyinShip, this.bufferWithCount(AYIN_RENDER_TRIANGLES.data)]]);
 		let map2 = new Map([[RenderableType.ThrustParticle, particleBuf],
 							[RenderableType.RedExplosionParticle, particleBuf],
 							[RenderableType.BlueExplosionParticle, particleBuf],
@@ -557,9 +583,13 @@ export class Renderer {
 		assertDefinedForAllEnum(map1, EntityType);
 		assertDefinedForAllEnum(map2, RenderableType);
 
+		let map3 = new Map([[AttachedType.Pupil, this.bufferWithCount(AYIN_PUPIL_TRIANGLES.data)]]);
+		assertDefinedForAllEnum(map3, AttachedType);
+		
 		return {
 			entityBuffers: map1,
 			renderableBuffers: map2,
+			attachedBuffers: map3,
 			grid: this.bufferWithCount(GRID_LINES),
 			stars: this.bufferWithCount(STAR_TRIANGLES),
 			margin: this.bufferWithCount(MARGIN_TRIANGLES),
@@ -735,6 +765,13 @@ export class Renderer {
 			getEntityColor(entity, color1, color2, color3);
 			this.renderEntity(entity.x, entity.y, entity.angleInt, 100,
 							  this.buffers.entityBuffers.get(entity.type)!, color1, color2, color3);
+			// Attached things
+			if (entity.type === EntityType.AyinShip) {
+				getAttachedColor(AttachedType.Pupil, color1, color2, color3);
+				this.renderEntity(entity.x, entity.y, entity.angleInt, 100,
+								  this.buffers.attachedBuffers.get(AttachedType.Pupil)!,
+								  color1, color2, color3);
+			}
 		}
 		
 		for (let i = 0, l = state.renderables.length; i < l; ++i) {
@@ -802,12 +839,14 @@ export class Renderer {
 		const barTop = max(this.titleHeight, this.comboHeight) * (1 + TITLE_VSEP_RATIO);
 		const barBottom = canvas.height - (1 + BAR_VSEP_RATIO) * this.barSymbolHeight;
 		const barOffset = (isPlayer2 ? BAR_TYPE_COUNT : 0) + barType;
+		const shipInfo = shipInfos.get(entity.type)!;
+		assert(shipInfo != null, "Missing ship info when doing handleBarRendering");
 
 		if (this.barGlowFrames[barOffset] > 0) {
 			--this.barGlowFrames[barOffset];
 		}
 		const curValue = barType === BarType.HP ? entity.hp : barType === BarType.BATT ? entity.batt : entity.warp;
-		const maxValue = barType === BarType.HP ? getMaxHp(entity.type) : barType === BarType.BATT ? getMaxBatt(entity.type) : getMaxWarp(entity.type);
+		const maxValue = barType === BarType.HP ? shipInfo.maxHp : barType === BarType.BATT ? shipInfo.maxBatt : shipInfo.maxWarp;
 		if (this.barLastValue[barOffset] != curValue &&
 			!(barType === BarType.BATT && curValue > this.barLastValue[barOffset]) &&
 			!(barType === BarType.WARP && curValue > this.barLastValue[barOffset])) {
@@ -861,7 +900,7 @@ export class Renderer {
 		const canvas = isPlayer2 ? this.player2Canvas : this.player1Canvas;
 		const width = canvas.width, height = canvas.height;
 		const entity = state.entities[isPlayer2 ? PLAYER2_INDEX : PLAYER1_INDEX];
-		const maxHp = getMaxHp(entity.type);
+		const maxHp = shipInfos.get(entity.type)!.maxHp;
 		const hp = entity.hp;
 		ctx.font = this.titleFontSize.toString() + 'px monospace';
 		ctx.fillStyle = 'black';
