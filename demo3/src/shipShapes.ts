@@ -1,6 +1,6 @@
 // TODO: This file needs to have float protection
 
-import { safeCosMul, safeSinMul, safeDiv, MAX_INT_ANGLE } from './safeCalc';
+import { safeCosMul, safeSinMul, safeDiv, safeAtan2, MAX_INT_ANGLE } from './safeCalc';
 import { getCoarseSquare, getCoarseRadius, Point, rotateAndTranslate, ShapeInfo, ShapeInfoType } from './spatial';
 import { assert } from '../../src/util/assert';
 
@@ -124,15 +124,20 @@ export const PARTICLE_TRIANGLES = [
 ];
 
 function makeCircleTriangles(radius: number, count: number) {
+	return makeSectorTriangles(radius, count, 0, MAX_INT_ANGLE);
+}
+
+function makeSectorTriangles(radius: number, count: number, startAngle: number, endAngle: number) {
 	const ret = [];
+	const angleDiff = endAngle - startAngle;
 	for (let i = 0; i < count; ++i) {
 		ret.push(0, 0,
-				 safeCosMul(radius, safeDiv(MAX_INT_ANGLE * i, count)),
-				 safeSinMul(radius, safeDiv(MAX_INT_ANGLE * i, count)),
-				 safeCosMul(radius, safeDiv(MAX_INT_ANGLE * (i + 1), count)),
-				 safeSinMul(radius, safeDiv(MAX_INT_ANGLE * (i + 1), count)));
+				 safeCosMul(radius, startAngle + safeDiv(angleDiff * i, count)),
+				 safeSinMul(radius, startAngle + safeDiv(angleDiff * i, count)),
+				 safeCosMul(radius, startAngle + safeDiv(angleDiff * (i + 1), count)),
+				 safeSinMul(radius, startAngle + safeDiv(angleDiff * (i + 1), count)));
 	}
-	return triangles(ret);
+	return triangles(ret);	
 }
 
 export const AYIN_WIDTH = 4000;
@@ -140,10 +145,69 @@ export const AYIN_HEIGHT = 4000;
 assert(AYIN_HEIGHT === AYIN_WIDTH, "Ayin is a circle, so width and height must be the same");
 export const AYIN_RENDER_TRIANGLES = makeCircleTriangles(safeDiv(AYIN_WIDTH, 2), 20);
 export const AYIN_PUPIL_TRIANGLES = (() => {
-	const ret = makeCircleTriangles(safeDiv(AYIN_WIDTH, 2 * 3.54), 10);
+	const ret = makeCircleTriangles(safeDiv(AYIN_WIDTH, 2 * 3.54), 10); // it's ok to use 3.54 since this render-only
 	for (let i = 0, l = ret.data.length; i < l; i += 2)
 		ret.data[i] += safeDiv(AYIN_WIDTH * 3, 2 * 5);
 	return ret;
 })();
 export const AYIN_SHAPE = {type: ShapeInfoType.Circles, data: [0, 0, safeDiv(AYIN_WIDTH, 2)]};
 export const AYIN_COARSE_RADIUS = getCoarseRadius(AYIN_SHAPE);
+const AYIN_SHOT_A1_WIDTH = AYIN_WIDTH * 2;
+const AYIN_SHOT_A1_HEIGHT = AYIN_WIDTH * 6;
+const AYIN_SHOT_A1_EDGE_HEIGHT = AYIN_WIDTH * 2;
+
+export const AYIN_SHOT_A1_TRIANGLES = triangles([
+	-safeDiv(AYIN_SHOT_A1_WIDTH, 2),
+	+safeDiv(AYIN_SHOT_A1_HEIGHT, 2),
+	+safeDiv(AYIN_SHOT_A1_WIDTH, 2),
+	+safeDiv(AYIN_SHOT_A1_EDGE_HEIGHT, 2),
+	+safeDiv(AYIN_SHOT_A1_WIDTH, 2),
+	-safeDiv(AYIN_SHOT_A1_EDGE_HEIGHT, 2),
+
+	+safeDiv(AYIN_SHOT_A1_WIDTH, 2),
+	+safeDiv(AYIN_SHOT_A1_EDGE_HEIGHT, 2),
+	+safeDiv(AYIN_SHOT_A1_WIDTH, 2),
+	-safeDiv(AYIN_SHOT_A1_EDGE_HEIGHT, 2),
+	-safeDiv(AYIN_SHOT_A1_WIDTH, 2),
+    -safeDiv(AYIN_SHOT_A1_HEIGHT, 2),
+]);
+export const AYIN_SHOT_A1_COARSE_RADIUS	= getCoarseRadius(AYIN_SHOT_A1_TRIANGLES);
+
+export const AYIN_HELPER_B1_WIDTH = safeDiv(AYIN_WIDTH, 2);
+export const AYIN_HELPER_B1_SHAPE = {type: ShapeInfoType.Circles, data: [0, 0, safeDiv(AYIN_HELPER_B1_WIDTH, 2)]};
+export const AYIN_HELPER_B1_COARSE_RADIUS = getCoarseRadius(AYIN_HELPER_B1_SHAPE);
+export const AYIN_HELPER_B1_RENDER_TRIANGLES = makeCircleTriangles(safeDiv(AYIN_HELPER_B1_WIDTH, 2), 20);
+
+// Created from the following Desmos equations:
+// x^2+y^2=4 {x > -0.8}
+// 0.4364x+2.18 {-5<x<-0.8}
+// -0.4364x+-2.18 {-5<x<-0.8}
+// 
+// Note: the width of these equations is 7
+//       the height is 2.
+
+export const AYIN_HELPER_B1_ATTACK_SHOT_SCALE = 150;
+//export const AYIN_HELPER_B1_ATTACK_SHOT_WIDTH = 7 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE;
+//export const AYIN_HELPER_B1_ATTACK_SHOT_HEIGHT = 200 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE; This one is probably wrong, be careful when uncommenting
+export const AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF = [-5 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE, 0,
+   													 safeDiv(-8 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE, 10), +1 * (safeDiv(safeDiv(-8 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE, 10) * 4364, 10000) + safeDiv(218 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE, 100)),
+													 safeDiv(-8 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE, 10), -1 * (safeDiv(safeDiv(-8 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE, 10) * 4364, 10000) + safeDiv(218 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE, 100))];
+export const AYIN_HELPER_B1_ATTACK_SHOT_SHAPE = {
+	type: ShapeInfoType.Triangles,
+	data: AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF.concat(makeSectorTriangles(2 * AYIN_HELPER_B1_ATTACK_SHOT_SCALE, 5,
+																		  safeAtan2(AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF[5], AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF[4]),
+																		  safeAtan2(AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF[3], AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF[2]) + MAX_INT_ANGLE).data)
+};
+
+export const AYIN_SHOT_A2_TRIANGLES = {
+	type: ShapeInfoType.Triangles,
+	data: AYIN_HELPER_B1_ATTACK_SHOT_SHAPE.data.map(val => val * 2)
+};
+
+export const AYIN_SHOT_C1_TRIANGLES = {
+	type: ShapeInfoType.Triangles,
+	data: AYIN_SHOT_A1_TRIANGLES.data.map(val => safeDiv(val, 2))
+};
+
+		   
+		   

@@ -1,7 +1,7 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, Renderable, RenderableType, WinScreen, assertDefinedForAllEnum, getFadeFrames, THRUST_FRAMES, WARP_AFTER_IMAGE_TTL_FRAMES } from './GameState';
 import { MAX_INT_ANGLE, max, min } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES, AYIN_RENDER_TRIANGLES, AYIN_PUPIL_TRIANGLES } from './shipShapes';
+import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES, AYIN_RENDER_TRIANGLES, AYIN_PUPIL_TRIANGLES, AYIN_SHOT_A1_TRIANGLES, AYIN_HELPER_B1_RENDER_TRIANGLES, AYIN_HELPER_B1_ATTACK_SHOT_SHAPE, AYIN_SHOT_A2_TRIANGLES, AYIN_SHOT_C1_TRIANGLES } from './shipShapes';
 import { Entity, EntityType, EntityState, EntityColor, CollisionSide } from './Entity';
 import { shipInfos } from './shipInfos';
 import { assert } from '../../src/util/assert';
@@ -277,35 +277,48 @@ function getShipColor(entity: Entity, color1: Color, color2: Color, color3: Colo
 	SHIP_COLOR_HANDLER_MAP.get(getEntityState(entity))!(entity, color1, color2, color3);
 }
 
+function getHelperColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
+	getShipColor(entity, color1, color2, color3);
+	if (getEntityState(entity) === EntityState.Idle)
+		color1.a = color2.a = color3.a = 0.2;
+}
+
 function getShotColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
+	const fadeFrames = getFadeFrames(entity.type);
+	const alpha = entity.collisionSide == CollisionSide.None && fadeFrames > 0 ? (entity.framesToStateChange / fadeFrames * 1.0) : 1.0;	
 	switch (entity.color) {
 		case EntityColor.Neutral:
 			color1.r = color2.r = color3.r = 1;
 			color1.g = color2.g = color3.g = 1;
 			color1.b = color2.b = color3.b = 1;
-			color1.a = color2.a = color3.a = 1;
+			color1.a = color2.a = color3.a = alpha;
 			break;
 		case EntityColor.Red:
 			color1.r = color2.r = color3.r = 1;
 			color1.g = color2.g = color3.g = 0.5;
 			color1.b = color2.b = color3.b = 0.5;
-			color1.a = color2.a = color3.a = 1;
+			color1.a = color2.a = color3.a = alpha;
 			break;
 		case EntityColor.Blue:
 			color1.r = color2.r = color3.r = 0.5;
 			color1.g = color2.g = color3.g = 0.5;
 			color1.b = color2.b = color3.b = 1;
-			color1.a = color2.a = color3.a = 1;
+			color1.a = color2.a = color3.a = alpha;
 			break;
 		case EntityColor.Purple:
 			color1.r = color2.r = color3.r = 1;
 			color1.g = color2.g = color3.g = 0.5;
 			color1.b = color2.b = color3.b = 1;
-			color1.a = color2.a = color3.a = 1;
+			color1.a = color2.a = color3.a = alpha;
 			break;
 		default:
 			throw new Error("Unknown color");
 	}
+}
+
+function getAyinShotC1Color(entity: Entity, color1: Color, color2: Color, color3: Color): void {
+	getShotColor(entity, color1, color2, color3);
+	color1.a = color2.a = color3.a = 0.7;
 }
 
 function getLaserShotColor(entity: Entity, color1: Color, color2: Color, color3: Color): void {
@@ -393,6 +406,11 @@ const ENTITY_COLOR_HANDLER_MAP = (() => {
 	map.set(EntityType.KidonShotC2Small, getShotColor);
 
 	map.set(EntityType.AyinShip, getShipColor);
+	map.set(EntityType.AyinShotA1, getShotColor);
+	map.set(EntityType.AyinHelperB1, getHelperColor);
+	map.set(EntityType.AyinHelperB1AttackShot, getHelperColor);
+	map.set(EntityType.AyinShotA2, getShotColor);
+	map.set(EntityType.AyinShotC1, getAyinShotC1Color);
 	return map;
 })();
 
@@ -574,7 +592,12 @@ export class Renderer {
 							[EntityType.KidonShotC1Small, this.bufferWithCount(KIDON_SHOT_C1_SMALL_TRIANGLES.data)],
 							[EntityType.KidonShotC2Big, this.bufferWithCount(KIDON_SHOT_C2_BIG_TRIANGLES.data)],
 							[EntityType.KidonShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES.data)],
-							[EntityType.AyinShip, this.bufferWithCount(AYIN_RENDER_TRIANGLES.data)]]);
+							[EntityType.AyinShip, this.bufferWithCount(AYIN_RENDER_TRIANGLES.data)],
+							[EntityType.AyinShotA1, this.bufferWithCount(AYIN_SHOT_A1_TRIANGLES.data)],
+							[EntityType.AyinHelperB1, this.bufferWithCount(AYIN_HELPER_B1_RENDER_TRIANGLES.data)],
+							[EntityType.AyinHelperB1AttackShot, this.bufferWithCount(AYIN_HELPER_B1_ATTACK_SHOT_SHAPE.data)],
+							[EntityType.AyinShotA2, this.bufferWithCount(AYIN_SHOT_A2_TRIANGLES.data)],
+							[EntityType.AyinShotC1, this.bufferWithCount(AYIN_SHOT_C1_TRIANGLES.data)]]);
 		let map2 = new Map([[RenderableType.ThrustParticle, particleBuf],
 							[RenderableType.RedExplosionParticle, particleBuf],
 							[RenderableType.BlueExplosionParticle, particleBuf],

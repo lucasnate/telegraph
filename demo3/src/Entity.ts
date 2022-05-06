@@ -13,6 +13,11 @@ export enum EntityType {
 	KidonShotC2Small,
 
 	AyinShip,
+	AyinShotA1,
+	AyinHelperB1,
+	AyinHelperB1AttackShot,
+	AyinShotA2,
+	AyinShotC1,
 }
 
 export enum CollisionSide {

@@ -1,4 +1,4 @@
-import { Entity, EntityType, EntityColor, EntityState } from './Entity';
+import { Entity, EntityType, EntityColor, EntityState, CollisionSide } from './Entity';
 import { safeDiv, safeCosMul, safeSinMul, abs, angleDiff, safeAtan2 } from './safeCalc';
 import { assert } from '../../src/util/assert';
 import { shipInfos } from './shipInfos';
@@ -14,7 +14,7 @@ export function turnToWantedAngle(src: Entity, dest: Entity, maxTurn: number) {
                                        : src.angleInt + maxTurn;
 }
 
-export function activateShot(entity_i: number, entities: Entity[], shotType: EntityType, speed: number, activeFrames: number, recoveryFrames: number, hasColor: boolean, fwdOffset: number) {
+export function activateShotWithoutRecovery(entity_i: number, entities: Entity[], shotType: EntityType, speed: number, activeFrames: number, color: EntityColor, fwdOffset: number) {
 	const entity = entities[entity_i];
 	const angle = entity.angleInt;
 	const newEntity =
@@ -34,10 +34,16 @@ export function activateShot(entity_i: number, entities: Entity[], shotType: Ent
 		 noStablizeFrames: 0,
 		 stateDoNotTouchDirectly: EntityState.Moving,
 		 startupMove: null,
-		 color: hasColor ? entity.color : EntityColor.Neutral,
+		 color: color,
 		 shouldBeRemoved: false};		
-	setEntityState(entity, EntityState.Recovery, recoveryFrames);
 	entities.push(newEntity);
+	return newEntity;
+}	
+
+export function activateShot(entity_i: number, entities: Entity[], shotType: EntityType, speed: number, activeFrames: number, recoveryFrames: number, hasColor: EntityColor, fwdOffset: number): Entity {
+	const entity = entities[entity_i];
+	setEntityState(entity, EntityState.Recovery, recoveryFrames);
+	return activateShotWithoutRecovery(entity_i, entities, shotType, speed, activeFrames, hasColor, fwdOffset);
 }
 
 export function activateLaser(entity_i: number, entities: Entity[], shotType: EntityType, activeFrames: number, turn: number, unblockable: boolean, fwdOffset: number) {
@@ -102,4 +108,15 @@ export const SHIP_LIST: EntityType[] = [];
 export const SHIP_SET: Set<EntityType> = new Set();
 export function isShip(type: EntityType): boolean {
 	return SHIP_SET.has(type);
+}
+
+export function handleHomingShotMovement(entity: Entity, player1: Entity, player2: Entity, activeFrames: number, homingFrames: number, turnPerFrame: number, speed: number) {
+	if (activeFrames - entity.framesToStateChange < homingFrames) {
+		const enemy = entity.collisionSide === CollisionSide.PlayerOne ? player2 : player1;
+		turnToWantedAngle(entity, enemy, turnPerFrame);
+		entity.vx = safeCosMul(speed, entity.angleInt);
+		entity.vy = safeSinMul(speed, entity.angleInt);
+	}
+	entity.x += entity.vx;
+	entity.y += entity.vy;
 }
