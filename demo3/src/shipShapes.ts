@@ -1,7 +1,7 @@
 // TODO: This file needs to have float protection
 
 import { safeCosMul, safeSinMul, safeDiv, safeAtan2, MAX_INT_ANGLE } from './safeCalc';
-import { getCoarseSquare, getCoarseRadius, Point, rotateAndTranslate, ShapeInfo, ShapeInfoType } from './spatial';
+import { getCoarseSquare, getCoarseRadius, Point, rotateAndScaleAndTranslate, ShapeInfo, ShapeInfoType } from './spatial';
 import { assert } from '../../src/util/assert';
 
 export const KIDON_WIDTH = 3500;
@@ -46,7 +46,7 @@ export const KIDON_TRIANGLES = triangles((() => {
 	for (let i = 0, l = toRotate.length; i < l; i += 2) {
 		pt.x = toRotate[i];
 		pt.y = toRotate[i+1];
-		rotateAndTranslate(pt, -safeDiv(MAX_INT_ANGLE, 4), 0, 0);
+		rotateAndScaleAndTranslate(pt, -safeDiv(MAX_INT_ANGLE, 4), 100, 100, 0, 0);
 		toRotate[i] = pt.x;
 		toRotate[i+1] = pt.y;
 	}
@@ -73,6 +73,18 @@ export const KIDON_SHOT_A2_HEIGHT = safeDiv(KIDON_HEIGHT, 4)
 export const KIDON_SHOT_A2_TRIANGLES = makeKidonShotTriangles(KIDON_SHOT_A2_WIDTH, KIDON_SHOT_A2_HEIGHT);
 export const KIDON_SHOT_A2_COARSE_RADIUS = getCoarseRadius(KIDON_SHOT_A2_TRIANGLES);
 
+export const LASER_HEIGHT = 875;
+export const LASER_WIDTH = 5;
+export const LASER_TRIANGLES = triangles([
+	0,               +safeDiv(LASER_HEIGHT, 2),
+	0,               -safeDiv(LASER_HEIGHT, 2),
+	LASER_WIDTH,     +safeDiv(LASER_HEIGHT, 2),
+	LASER_WIDTH,     +safeDiv(LASER_HEIGHT, 2),
+	LASER_WIDTH,     -safeDiv(LASER_HEIGHT, 2),
+	0,               -safeDiv(LASER_HEIGHT, 2)
+]);
+
+// TODO: Get rid of this and unify everything under a custom sized laser?
 function makeLaserTriangles(width: number, height: number) {
 	return triangles([
 		0,     +safeDiv(height, 2),
@@ -209,5 +221,10 @@ export const AYIN_SHOT_C1_TRIANGLES = {
 	data: AYIN_SHOT_A1_TRIANGLES.data.map(val => safeDiv(val, 2))
 };
 
+export const AYIN_SHOT_C2_BASE_HEIGHT = AYIN_SHOT_A1_HEIGHT;
+export const AYIN_SHOT_C2_TRIANGLES = AYIN_SHOT_A1_TRIANGLES;
 		   
-		   
+export const AYIN_HELPER_B2_SHAPE = AYIN_HELPER_B1_SHAPE;
+export const AYIN_HELPER_B2_WIDTH = AYIN_HELPER_B1_WIDTH;
+export const AYIN_HELPER_B2_RENDER_TRIANGLES = AYIN_HELPER_B1_RENDER_TRIANGLES;
+export const AYIN_HELPER_B2_ATTACK_SHOT_SHAPE = AYIN_HELPER_B1_ATTACK_SHOT_SHAPE;

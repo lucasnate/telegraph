@@ -109,3 +109,15 @@ export function rand(state: MulberryState, min: number, max: number): number {
 	x += min;
 	return x;
 }
+
+export function norm2sq(x: number,y: number): number {
+	return x*x + y*y;
+}
+
+export function arithSeriesSum(first: number, last: number, diff: number) {
+	const n = (last - first) % diff === 0
+		? safeDiv(last - first, diff)
+		: safeDiv(last - first, diff) + 1;
+	if (n <= 0) { return 0; }	
+	return safeDiv((first + (first + diff * (n - 1))) * n, 2);
+}

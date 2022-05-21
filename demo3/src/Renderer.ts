@@ -1,7 +1,7 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
 import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, Renderable, RenderableType, WinScreen, assertDefinedForAllEnum, getFadeFrames, THRUST_FRAMES, WARP_AFTER_IMAGE_TTL_FRAMES } from './GameState';
 import { MAX_INT_ANGLE, max, min } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES, AYIN_RENDER_TRIANGLES, AYIN_PUPIL_TRIANGLES, AYIN_SHOT_A1_TRIANGLES, AYIN_HELPER_B1_RENDER_TRIANGLES, AYIN_HELPER_B1_ATTACK_SHOT_SHAPE, AYIN_SHOT_A2_TRIANGLES, AYIN_SHOT_C1_TRIANGLES } from './shipShapes';
+import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES, AYIN_RENDER_TRIANGLES, AYIN_PUPIL_TRIANGLES, AYIN_SHOT_A1_TRIANGLES, AYIN_HELPER_B1_RENDER_TRIANGLES, AYIN_HELPER_B1_ATTACK_SHOT_SHAPE, AYIN_SHOT_A2_TRIANGLES, AYIN_SHOT_C1_TRIANGLES, AYIN_SHOT_C2_TRIANGLES, AYIN_HELPER_B2_RENDER_TRIANGLES, AYIN_HELPER_B2_ATTACK_SHOT_SHAPE } from './shipShapes';
 import { Entity, EntityType, EntityState, EntityColor, CollisionSide } from './Entity';
 import { shipInfos } from './shipInfos';
 import { assert } from '../../src/util/assert';
@@ -407,10 +407,13 @@ const ENTITY_COLOR_HANDLER_MAP = (() => {
 
 	map.set(EntityType.AyinShip, getShipColor);
 	map.set(EntityType.AyinShotA1, getShotColor);
-	map.set(EntityType.AyinHelperB1, getHelperColor);
-	map.set(EntityType.AyinHelperB1AttackShot, getHelperColor);
 	map.set(EntityType.AyinShotA2, getShotColor);
+	map.set(EntityType.AyinHelperB1, getHelperColor);
+	map.set(EntityType.AyinHelperB1AttackShot, getShotColor);
+	map.set(EntityType.AyinHelperB2, getHelperColor);
+	map.set(EntityType.AyinHelperB2AttackShot, getShotColor);
 	map.set(EntityType.AyinShotC1, getAyinShotC1Color);
+	map.set(EntityType.AyinShotC2, getShotColor);
 	return map;
 })();
 
@@ -596,8 +599,11 @@ export class Renderer {
 							[EntityType.AyinShotA1, this.bufferWithCount(AYIN_SHOT_A1_TRIANGLES.data)],
 							[EntityType.AyinHelperB1, this.bufferWithCount(AYIN_HELPER_B1_RENDER_TRIANGLES.data)],
 							[EntityType.AyinHelperB1AttackShot, this.bufferWithCount(AYIN_HELPER_B1_ATTACK_SHOT_SHAPE.data)],
+							[EntityType.AyinHelperB2, this.bufferWithCount(AYIN_HELPER_B2_RENDER_TRIANGLES.data)],
+							[EntityType.AyinHelperB2AttackShot, this.bufferWithCount(AYIN_HELPER_B2_ATTACK_SHOT_SHAPE.data)],
 							[EntityType.AyinShotA2, this.bufferWithCount(AYIN_SHOT_A2_TRIANGLES.data)],
-							[EntityType.AyinShotC1, this.bufferWithCount(AYIN_SHOT_C1_TRIANGLES.data)]]);
+							[EntityType.AyinShotC1, this.bufferWithCount(AYIN_SHOT_C1_TRIANGLES.data)],
+							[EntityType.AyinShotC2, this.bufferWithCount(AYIN_SHOT_C2_TRIANGLES.data)]]);
 		let map2 = new Map([[RenderableType.ThrustParticle, particleBuf],
 							[RenderableType.RedExplosionParticle, particleBuf],
 							[RenderableType.BlueExplosionParticle, particleBuf],
@@ -756,7 +762,7 @@ export class Renderer {
 	matrixForRenderEntity = mat4.create();
 	scaleVecForRenderEntity = vec3.create();
 	axisVecForRenderEntity = vec3.clone([0,0,1]);
-	renderEntity(x: number, y: number, angle: number, sizePct: number, bufWithCnt: BufferWithCount,
+	renderEntity(x: number, y: number, angle: number, scaleWidthPct: number, scaleHeightPct: number, bufWithCnt: BufferWithCount,
 				 color1: Color, color2: Color, color3: Color) {
 		const pos = this.posForRenderEntity;
 		const matrix = this.matrixForRenderEntity;
@@ -769,7 +775,9 @@ export class Renderer {
 		mat4.identity(matrix);
 		mat4.translate(matrix, matrix, pos);
 		mat4.rotate(matrix, matrix, angle * 2 * Math.PI / MAX_INT_ANGLE, this.axisVecForRenderEntity);
-		this.scaleVecForRenderEntity[0] = this.scaleVecForRenderEntity[1] = this.scaleVecForRenderEntity[2] = sizePct / 100.0;
+		this.scaleVecForRenderEntity[0] = scaleWidthPct / 100.0;
+		this.scaleVecForRenderEntity[1] = scaleHeightPct / 100.0;
+		this.scaleVecForRenderEntity[2] = 1;
 		mat4.scale(matrix, matrix, this.scaleVecForRenderEntity);
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, bufWithCnt.buffer);
 		this.gl.vertexAttribPointer(this.programInfo.attribLocations.vertexPosition, 2, this.gl.FLOAT, false, 0, 0);
@@ -786,12 +794,12 @@ export class Renderer {
 		for (let i = 0, l = state.entities.length; i < l; ++i) {
 			const entity = state.entities[i];
 			getEntityColor(entity, color1, color2, color3);
-			this.renderEntity(entity.x, entity.y, entity.angleInt, 100,
+			this.renderEntity(entity.x, entity.y, entity.angleInt, entity.scaleWidthPct, entity.scaleHeightPct,
 							  this.buffers.entityBuffers.get(entity.type)!, color1, color2, color3);
 			// Attached things
 			if (entity.type === EntityType.AyinShip) {
 				getAttachedColor(AttachedType.Pupil, color1, color2, color3);
-				this.renderEntity(entity.x, entity.y, entity.angleInt, 100,
+				this.renderEntity(entity.x, entity.y, entity.angleInt, 100, 100,
 								  this.buffers.attachedBuffers.get(AttachedType.Pupil)!,
 								  color1, color2, color3);
 			}
@@ -800,7 +808,7 @@ export class Renderer {
 		for (let i = 0, l = state.renderables.length; i < l; ++i) {
 			const renderable = state.renderables[i];
 			getRenderableColor(renderable, color1, color2, color3);
-			this.renderEntity(renderable.x, renderable.y, renderable.angleInt, renderable.sizePct,
+			this.renderEntity(renderable.x, renderable.y, renderable.angleInt, renderable.sizePct, renderable.sizePct,
 							  this.buffers.renderableBuffers.get(renderable.type)!, color1, color2, color3);
 		}
 	}

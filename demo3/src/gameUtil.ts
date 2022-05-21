@@ -1,7 +1,9 @@
 import { Entity, EntityType, EntityColor, EntityState, CollisionSide } from './Entity';
-import { safeDiv, safeCosMul, safeSinMul, abs, angleDiff, safeAtan2 } from './safeCalc';
+import { safeDiv, safeCosMul, safeSinMul, abs, angleDiff, safeAtan2, norm2sq, safeSqrt, max, min } from './safeCalc';
 import { assert } from '../../src/util/assert';
 import { shipInfos } from './shipInfos';
+import { Move } from './Move';
+import { MoveInfo } from './MoveInfo';
 
 export const PLAYER1_INDEX = 0;
 export const PLAYER2_INDEX = 1;
@@ -29,6 +31,8 @@ export function activateShotWithoutRecovery(entity_i: number, entities: Entity[]
 		 preWarpVx: 0,
 		 preWarpVy: 0,
 		 angleInt: angle,
+		 scaleWidthPct: 100,
+		 scaleHeightPct: 100,		 
 		 collisionSide: entity.collisionSide,
 		 framesToStateChange: activeFrames,
 		 noStablizeFrames: 0,
@@ -46,7 +50,7 @@ export function activateShot(entity_i: number, entities: Entity[], shotType: Ent
 	return activateShotWithoutRecovery(entity_i, entities, shotType, speed, activeFrames, hasColor, fwdOffset);
 }
 
-export function activateLaser(entity_i: number, entities: Entity[], shotType: EntityType, activeFrames: number, turn: number, unblockable: boolean, fwdOffset: number) {
+export function activateGuidedLaser(entity_i: number, entities: Entity[], shotType: EntityType, activeFrames: number, turn: number, unblockable: boolean, fwdOffset: number) {
 	assert(entity_i === PLAYER1_INDEX || entity_i === PLAYER2_INDEX,
 		   "Weird entity_i");
 	const entity = entities[entity_i];
@@ -63,6 +67,8 @@ export function activateLaser(entity_i: number, entities: Entity[], shotType: En
 		 preWarpVx: 0,
 		 preWarpVy: 0,
 		 angleInt: entity.angleInt,
+		 scaleWidthPct: 100,
+		 scaleHeightPct: 100,
 		 collisionSide: entity.collisionSide,
 		 framesToStateChange: activeFrames,
 		 noStablizeFrames: 0,
@@ -110,13 +116,43 @@ export function isShip(type: EntityType): boolean {
 	return SHIP_SET.has(type);
 }
 
-export function handleHomingShotMovement(entity: Entity, player1: Entity, player2: Entity, activeFrames: number, homingFrames: number, turnPerFrame: number, speed: number) {
+export function handleHomingShotState(entity_i: number, entities: Entity[], activeFrames: number, homingFrames: number, turnPerFrame: number, speed: number) {
+	const entity = entities[entity_i];
+	const player1 = entities[PLAYER1_INDEX];
+	const player2 = entities[PLAYER2_INDEX];
 	if (activeFrames - entity.framesToStateChange < homingFrames) {
 		const enemy = entity.collisionSide === CollisionSide.PlayerOne ? player2 : player1;
 		turnToWantedAngle(entity, enemy, turnPerFrame);
 		entity.vx = safeCosMul(speed, entity.angleInt);
 		entity.vy = safeSinMul(speed, entity.angleInt);
 	}
-	entity.x += entity.vx;
-	entity.y += entity.vy;
+	if (--entity.framesToStateChange <= 0)
+		entity.shouldBeRemoved = true;	
+}
+
+export function doEntityAccel(entity: Entity, accel: number, maxSpeed: number) {
+	const newVx = entity.vx + safeCosMul(accel, entity.angleInt);
+	const newVy = entity.vy + safeSinMul(accel, entity.angleInt);
+	const newNormSq = norm2sq(newVx, newVy);
+	if (newNormSq > maxSpeed * maxSpeed) {
+		const newNorm = safeSqrt(newNormSq);
+		const allowedNorm = max(min(newNorm, safeSqrt(norm2sq(entity.vx, entity.vy))), maxSpeed);
+		entity.vx = safeDiv(newVx * allowedNorm, newNorm);
+		entity.vy = safeDiv(newVy * allowedNorm, newNorm);
+	} else {
+		entity.vx = newVx;
+		entity.vy = newVy;
+	}
+}
+
+export function tryStartupWeapon(entity_i: number, entities: Entity[], move: Move, info: MoveInfo): boolean {
+	const entity = entities[entity_i];
+	if (entity.batt < info.battCost)
+		return false;
+
+	entity.batt -= info.battCost;
+	
+	setEntityState(entity, EntityState.Startup, info.startupFrames);
+	entity.startupMove = move;
+	return true;
 }

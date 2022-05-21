@@ -1,29 +1,28 @@
-todo: non-idle b1 helpers  should disappear if their parent gets shot.
-
 // TODO: This file needs to have float protection
 
 // TODO: thrust is 1, 0.8, 0, 0.9
 
 import { SyncData, InputValues } from '../../src/types';
 import { RingBuffer } from '../../src/util/RingBuffer';
-import { safeDiv, safeSqrt, MAX_INT_ANGLE, safeCosMul, safeSinMul, safeAtan2, abs, angleDiff, normalizeAngle, min, max, rand } from './safeCalc';
+import { safeDiv, safeSqrt, MAX_INT_ANGLE, safeCosMul, safeSinMul, safeAtan2, abs, angleDiff, normalizeAngle, min, max, rand, norm2sq } from './safeCalc';
 import { abstractKeyUpMask, abstractKeyLeftMask, abstractKeyRightMask, abstractKeyDownMask, abstractKeyRedMask, abstractKeyBlueMask,
 		 abstractKeyA1Mask, abstractKeyB1Mask, abstractKeyA2Mask, abstractKeyB2Mask,
 		 abstractKeyC1Mask, abstractKeyC2Mask, abstractKeyWarpMask} from './Inputter';
 
-import { KIDON_WIDTH, KIDON_HEIGHT, KIDON_SHOT_A1_WIDTH, KIDON_SHOT_A2_WIDTH, KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_COARSE_RADIUS, KIDON_SHOT_A1_COARSE_RADIUS, KIDON_SHOT_A2_COARSE_RADIUS, KIDON_SHOT_B2_COARSE_RADIUS, KIDON_SHOT_B1_COARSE_RADIUS, KIDON_SHOT_C1_BIG_COARSE_RADIUS, KIDON_SHOT_C1_SMALL_COARSE_RADIUS, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C1_BIG_HEIGHT, KIDON_SHOT_C2_BIG_HEIGHT, KIDON_SHOT_C2_BIG_COARSE_RADIUS, KIDON_SHOT_C2_SMALL_COARSE_RADIUS, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, AYIN_SHAPE, AYIN_COARSE_RADIUS, AYIN_SHOT_A1_COARSE_RADIUS, AYIN_SHOT_A1_TRIANGLES, AYIN_HELPER_B1_COARSE_RADIUS, AYIN_HELPER_B1_SHAPE, AYIN_HELPER_B1_ATTACK_SHOT_SHAPE, AYIN_SHOT_A2_TRIANGLES, AYIN_SHOT_C1_TRIANGLES } from './shipShapes';
-import { Point, rotateAndTranslate, ShapeInfo, ShapeInfoType, fineShapeCollision, getCoarseRadius } from './spatial';
+import { KIDON_WIDTH, KIDON_HEIGHT, KIDON_SHOT_A1_WIDTH, KIDON_SHOT_A2_WIDTH, KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_COARSE_RADIUS, KIDON_SHOT_A1_COARSE_RADIUS, KIDON_SHOT_A2_COARSE_RADIUS, KIDON_SHOT_B2_COARSE_RADIUS, KIDON_SHOT_B1_COARSE_RADIUS, KIDON_SHOT_C1_BIG_COARSE_RADIUS, KIDON_SHOT_C1_SMALL_COARSE_RADIUS, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C1_BIG_HEIGHT, KIDON_SHOT_C2_BIG_HEIGHT, KIDON_SHOT_C2_BIG_COARSE_RADIUS, KIDON_SHOT_C2_SMALL_COARSE_RADIUS, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, AYIN_SHAPE, AYIN_COARSE_RADIUS, AYIN_SHOT_A1_COARSE_RADIUS, AYIN_SHOT_A1_TRIANGLES, AYIN_HELPER_B1_COARSE_RADIUS, AYIN_HELPER_B1_SHAPE, AYIN_HELPER_B1_ATTACK_SHOT_SHAPE, AYIN_SHOT_A2_TRIANGLES, AYIN_SHOT_C1_TRIANGLES, AYIN_SHOT_C2_TRIANGLES, AYIN_HELPER_B2_SHAPE, AYIN_HELPER_B2_ATTACK_SHOT_SHAPE } from './shipShapes';
+import { Point, rotateAndScaleAndTranslate, ShapeInfo, ShapeInfoType, fineShapeCollision, getCoarseRadius } from './spatial';
 import { assert } from '../../src/util/assert';
 import { Move } from './Move';
+import { MoveInfo } from './MoveInfo';
 import { kidonInfo } from './kidon';
-import { ayinInfo, handleAyinHelperB1State, AYIN_HELPER_B1_ATTACK_SHOT_ACCEL_ON_BLOCK, AYIN_HELPER_B1_ATTACK_SHOT_ACCEL_ON_HIT, AYIN_HELPER_B1_ATTACK_SHOT_BLOCKSTUN_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_HITSTUN_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_BLOCKED_DAMAGE, AYIN_HELPER_B1_ATTACK_SHOT_HIT_DAMAGE, AYIN_HELPER_B1_ATTACK_SHOT_ACTIVE_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_HOMING_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_TURN_PER_FRAME, AYIN_HELPER_B1_ATTACK_SHOT_SPEED, AYIN_SHOT_C1_ACCEL_ON_BLOCK, AYIN_SHOT_C1_ACCEL_ON_HIT, AYIN_SHOT_C1_BLOCKSTUN_FRAMES, AYIN_SHOT_C1_HITSTUN_FRAMES, AYIN_SHOT_C1_BLOCKED_DAMAGE, AYIN_SHOT_C1_HIT_DAMAGE, AYIN_SHOT_A1_BLOCKED_DAMAGE, AYIN_SHOT_A1_HIT_DAMAGE } from './ayin';
+import { ayinInfo, handleAyinHelperB1State, handleAyinHelperB2State, AYIN_HELPER_B1_ATTACK_SHOT_ACCEL_ON_BLOCK, AYIN_HELPER_B1_ATTACK_SHOT_ACCEL_ON_HIT, AYIN_HELPER_B1_ATTACK_SHOT_BLOCKSTUN_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_HITSTUN_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_BLOCKED_DAMAGE, AYIN_HELPER_B1_ATTACK_SHOT_HIT_DAMAGE, AYIN_HELPER_B1_ATTACK_SHOT_ACTIVE_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_HOMING_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_TURN_PER_FRAME, AYIN_HELPER_B1_ATTACK_SHOT_SPEED, AYIN_SHOT_C1_ACCEL_ON_BLOCK, AYIN_SHOT_C1_ACCEL_ON_HIT, AYIN_SHOT_C1_BLOCKSTUN_FRAMES, AYIN_SHOT_C1_HITSTUN_FRAMES, AYIN_SHOT_C1_BLOCKED_DAMAGE, AYIN_SHOT_C1_HIT_DAMAGE, AYIN_SHOT_A1_BLOCKED_DAMAGE, AYIN_SHOT_A1_HIT_DAMAGE, AYIN_SHOT_C2_ACCEL_ON_BLOCK, AYIN_SHOT_C2_ACCEL_ON_HIT, AYIN_SHOT_C2_BLOCKSTUN_FRAMES, AYIN_SHOT_C2_HITSTUN_FRAMES, AYIN_SHOT_C2_BLOCKED_DAMAGE, AYIN_SHOT_C2_HIT_DAMAGE, AYIN_SHOT_C2_FADE_FRAMES, AYIN_HELPER_B2_ATTACK_SHOT_ACCEL_ON_BLOCK, AYIN_HELPER_B2_ATTACK_SHOT_ACCEL_ON_HIT, AYIN_HELPER_B2_ATTACK_SHOT_BLOCKSTUN_FRAMES, AYIN_HELPER_B2_ATTACK_SHOT_HITSTUN_FRAMES, AYIN_HELPER_B2_ATTACK_SHOT_BLOCKED_DAMAGE, AYIN_HELPER_B2_ATTACK_SHOT_HIT_DAMAGE, AYIN_HELPER_B2_ATTACK_SHOT_ACTIVE_FRAMES, AYIN_HELPER_B2_ATTACK_SHOT_HOMING_FRAMES, AYIN_HELPER_B2_ATTACK_SHOT_TURN_PER_FRAME, AYIN_HELPER_B2_ATTACK_SHOT_SPEED } from './ayin';
 import { ShipInfo } from './ShipInfo';
 import { shipInfos } from './shipInfos';
 import { ActivationHandler } from './ActivationHandler';
 import { EntityType, CollisionSide, EntityState, EntityColor, Entity } from './Entity';
 import { KIDON_SHOT_A1_RECOVERY_FRAMES, KIDON_SHOT_A2_RECOVERY_FRAMES, KIDON_SHOT_B1_ACTIVE_FRAMES, KIDON_SHOT_B2_ACTIVE_FRAMES, KIDON_SHOT_C1_ACTIVE_FRAMES, KIDON_SHOT_A2_SPEED, KIDON_SHOT_A2_ACTIVE_FRAMES, KIDON_SHOT_C1_RECOVERY_FRAMES, KIDON_SHOT_C2_RECOVERY_FRAMES, KIDON_SHOT_A2_STARTUP_FRAMES, KIDON_SHOT_C1_STARTUP_FRAMES, KIDON_SHOT_C2_STARTUP_FRAMES, KIDON_SHOT_C2_BIG_ACTIVE_FRAMES, KIDON_SHOT_A1_ACTIVE_FRAMES, KIDON_SHOT_A1_SPEED, KIDON_SHOT_B2_RECOVERY_FRAMES, KIDON_SHOT_B1_RECOVERY_FRAMES } from './kidon';
 import { AYIN_SHOT_A1_RECOVERY_FRAMES, AYIN_HELPER_B1_ATTACK_STARTUP_FRAMES, AYIN_SHOT_A2_BLOCKSTUN_FRAMES, AYIN_SHOT_A2_HITSTUN_FRAMES, AYIN_SHOT_A2_ACTIVE_FRAMES, AYIN_SHOT_A2_HOMING_FRAMES, AYIN_SHOT_A2_TURN_PER_FRAME, AYIN_SHOT_A2_SPEED } from './ayin';
-import { getEntityState, setEntityState, disableShipWarp, PLAYER1_INDEX, PLAYER2_INDEX, turnToWantedAngle, SHIP_SET, SHIP_LIST, handleHomingShotMovement } from './gameUtil';
+import { getEntityState, setEntityState, disableShipWarp, PLAYER1_INDEX, PLAYER2_INDEX, turnToWantedAngle, SHIP_SET, SHIP_LIST, handleHomingShotState, doEntityAccel } from './gameUtil';
 
 shipInfos.set(EntityType.KidonShip, kidonInfo);
 shipInfos.set(EntityType.AyinShip, ayinInfo);
@@ -31,7 +30,7 @@ for (let key of Array.from(shipInfos.keys())) {
 	SHIP_LIST.push(key);
 	SHIP_SET.add(key);
 }
-export const HELPER_LIST = [EntityType.AyinHelperB1];
+export const HELPER_LIST = [EntityType.AyinHelperB1, EntityType.AyinHelperB2];
 export const SHIP_AND_HELPER_LIST = HELPER_LIST.concat(SHIP_LIST);
 
 // TODO: Make vx/vy private so that they cannot be changed during warp.
@@ -135,6 +134,7 @@ export const KIDON_DEFENSE_WARP_SPEED = kidonInfo.maxSpeed * 2;
 export const KIDON_DEFENSE_WARP_FRAMES = 30;
 export const KIDON_OFFENSE_WARP_COST = 60 * 10;
 export const KIDON_OFFENSE_WARP_SPEED = kidonInfo.maxSpeed * 3;
+console.log("KIDON_OFFENSE_WARP_SPEED: " + KIDON_OFFENSE_WARP_SPEED.toString());
 export const KIDON_OFFENSE_WARP_FRAMES = 30;
 
 export const KIDON_SHOT_C2_BIG_ACCEL_ON_HIT = safeDiv(kidonInfo.maxSpeed, 3);
@@ -249,10 +249,6 @@ export interface GameState {
 	mulberryState: number
 }
 
-function norm2sq(x: number,y: number): number {
-	return x*x + y*y;
-}
-
 type MoveInputChecker = { (move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean; }
 
 function isDoingA1(move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
@@ -308,33 +304,23 @@ const MOVE_INPUT_CHECKERS = new Map<Move, MoveInputChecker>(
 	 [Move.C2, isDoingC2]]);
 assertDefinedForAllEnum(MOVE_INPUT_CHECKERS, Move);
 
-
-function tryActivateWeapon(entity: Entity, move: Move) {
-	const info = shipInfos.get(entity.type)!.moveInfo.get(move)!;
-	assert(info != null, "Missing move info");
-	if (entity.batt < info.battCost)
-		return false;
-
-	entity.batt -= info.battCost;
-	
-	setEntityState(entity, EntityState.Startup, info.startupFrames);
-	entity.startupMove = move;
-	return true;
-}
-
 function getLastInput(inputHistory: number[], inputHistoryNextIndex: number) {
 	return inputHistory[inputHistoryNextIndex - 1 < 0 ? (inputHistory.length - 1) : inputHistoryNextIndex - 1];
 }
 
 
 const AVAILABLE_MOVES = [Move.C2, Move.C1, Move.B2, Move.B1, Move.A2, Move.A1];
-function tryActivateAnyWeapon(entity: Entity, input: number, inputHistory: number[], inputHistoryNextIndex: number) {
+function tryStartupAnyWeapon(entity_i: number, entities: Entity[], input: number, inputHistory: number[], inputHistoryNextIndex: number) {
+	const entity = entities[entity_i];
 	for (var i = 0, l = AVAILABLE_MOVES.length; i < l; ++i) {
 		const move = AVAILABLE_MOVES[i];
 		const inputChecker = MOVE_INPUT_CHECKERS.get(move)!;
-		if (inputChecker(move, input, inputHistory, inputHistoryNextIndex))
-			if (tryActivateWeapon(entity, move))
+		if (inputChecker(move, input, inputHistory, inputHistoryNextIndex)) {
+			const info = shipInfos.get(entity.type)!.moveInfo.get(move)!;
+			assert(info != null, "Missing move info");
+			if (info.onTryStartup(entity_i, entities, move, info))
 				return;
+		}
 	}
 }
 
@@ -347,8 +333,10 @@ function handleEntityKeyboard(entity_i: number, gameState: GameState, input: num
 	const stun = state === EntityState.Hitstun || state === EntityState.Blockstun;
 	const usingWeapon = state === EntityState.Startup || state === EntityState.Active || state === EntityState.Recovery;
 	const lastInput = getLastInput(inputHistory, inputHistoryNextIndex);
-
-	if (!stun && !usingWeapon && state !== EntityState.Warp && entity.warp === kidonInfo.maxWarp) {
+	const shipInfo = shipInfos.get(entity.type)!;
+	assert(shipInfo != null, "null shipInfo in handleEntityKeyboard");
+	
+	if (!stun && !usingWeapon && state !== EntityState.Warp && entity.warp === shipInfo.maxWarp) {
 		if ((input & (abstractKeyLeftMask | abstractKeyRightMask)) &&
 			(input & abstractKeyWarpMask) &&
 			(!(lastInput & (abstractKeyLeftMask | abstractKeyRightMask)) ||
@@ -364,14 +352,14 @@ function handleEntityKeyboard(entity_i: number, gameState: GameState, input: num
 		}
 	}
 
-	if (!stun && state !== EntityState.Warp && entity.warp === kidonInfo.maxWarp) {
+	if (!stun && state !== EntityState.Warp && entity.warp === shipInfo.maxWarp) {
 		if ((input & abstractKeyUpMask) &&
 			(input & abstractKeyWarpMask) &&
 			(!(lastInput & abstractKeyUpMask) ||
 			 !(lastInput & abstractKeyWarpMask))) {
 			entity.angleInt = safeAtan2(enemy.y - entity.y, enemy.x - entity.x);
-			entity.preWarpVx = safeCosMul(kidonInfo.maxSpeed, entity.angleInt);
-			entity.preWarpVy = safeSinMul(kidonInfo.maxSpeed, entity.angleInt);
+			entity.preWarpVx = safeCosMul(shipInfo.maxSpeed, entity.angleInt);
+			entity.preWarpVy = safeSinMul(shipInfo.maxSpeed, entity.angleInt);
 			entity.vx = safeCosMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
 			entity.vy = safeSinMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
 			entity.warp -= KIDON_OFFENSE_WARP_COST;
@@ -381,25 +369,14 @@ function handleEntityKeyboard(entity_i: number, gameState: GameState, input: num
 	}
 	
 	if (!stun && !usingWeapon) {
-		tryActivateAnyWeapon(entity, input, inputHistory, inputHistoryNextIndex);
+		tryStartupAnyWeapon(entity_i, entities, input, inputHistory, inputHistoryNextIndex);
 		state = getEntityState(entity);
 	}
 
 	if ((input & abstractKeyUpMask) && !(input & abstractKeyWarpMask) && !stun &&
 		(state !== EntityState.Warp || !(lastInput & abstractKeyUpMask))) {
-		const newVx = entity.vx + safeCosMul(kidonInfo.accel, entity.angleInt);
-		const newVy = entity.vy + safeSinMul(kidonInfo.accel, entity.angleInt);
-		const newNormSq = norm2sq(newVx, newVy);
-		if (newNormSq > kidonInfo.maxSpeed * kidonInfo.maxSpeed) {
-			const newNorm = safeSqrt(newNormSq);
-			const allowedNorm = max(min(newNorm, safeSqrt(norm2sq(entity.vx, entity.vy))), kidonInfo.maxSpeed);
-			entity.vx = safeDiv(newVx * allowedNorm, newNorm);
-			entity.vy = safeDiv(newVy * allowedNorm, newNorm);
-		} else {
-			entity.vx = newVx;
-			entity.vy = newVy;
-		}
-			
+		doEntityAccel(entity, shipInfo.accel, shipInfo.maxSpeed);
+		
 		if (state === EntityState.Idle || state === EntityState.Moving || state === EntityState.Warp) {
 			// TODO: If we merge handleEntityKeyboard with handleEntityState, might need to get rid of this +1.
 			setEntityState(entity, EntityState.Moving, FRAMES_TO_IDLE_AFTER_UP + 1);
@@ -428,13 +405,13 @@ function handleEntityKeyboard(entity_i: number, gameState: GameState, input: num
 		}
 	} else if ((input & abstractKeyDownMask) && !stun) {
 		let norm2 = norm2sq(entity.vx, entity.vy);
-		if (norm2 < kidonInfo.accel * kidonInfo.accel) {
+		if (norm2 < shipInfo.accel * shipInfo.accel) {
 			entity.vx = 0;
 			entity.vy = 0;
 		} else {
 			const angleInt = safeAtan2(entity.vy, entity.vx);
-			entity.vx -= safeCosMul(kidonInfo.accel, angleInt);
-			entity.vy -= safeSinMul(kidonInfo.accel, angleInt);
+			entity.vx -= safeCosMul(shipInfo.accel, angleInt);
+			entity.vy -= safeSinMul(shipInfo.accel, angleInt);
 		}
 		
 	}
@@ -492,7 +469,7 @@ function handleShipState(entity_i: number, gameState: GameState) {
 			break;
 		case EntityState.Startup:
 			if (--entity.framesToStateChange <= 0) {
-				shipInfo.moveInfo.get(entity.startupMove!)!.handler(entity_i, entities);
+				shipInfo.moveInfo.get(entity.startupMove!)!.onActivation(entity_i, entities);
 			}
 			break;
 		case EntityState.Active:
@@ -562,6 +539,8 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 									   preWarpVx: 0,
 									   preWarpVy: 0,									   
 									   angleInt: entity.angleInt,
+									   scaleWidthPct: 100,
+									   scaleHeightPct: 100,
 									   collisionSide: entity.collisionSide,
 									   framesToStateChange: entity.framesToStateChange,
 									   noStablizeFrames: 0,
@@ -591,6 +570,8 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 									   preWarpVx: 0,
 									   preWarpVy: 0,									   
 									   angleInt: spreadAngle,
+									   scaleWidthPct: 100,
+									   scaleHeightPct: 100,
 									   collisionSide: entity.collisionSide,
 									   framesToStateChange: KIDON_SHOT_C2_SMALL_ACTIVE_FRAMES,
 									   noStablizeFrames: 0,
@@ -607,6 +588,7 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 		case EntityType.KidonShotB1:
 		case EntityType.KidonShotB2:
 		case EntityType.AyinShotA1:
+		case EntityType.AyinShotC2:
 			if (--entity.framesToStateChange <= 0) {
 				if (entity.collisionSide !== CollisionSide.None) {
 					entity.collisionSide = CollisionSide.None;
@@ -617,17 +599,31 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 			}
 			break;
 		case EntityType.KidonShotA1:
+			handleHomingShotState(entity_i, entities, KIDON_SHOT_A1_ACTIVE_FRAMES, KIDON_SHOT_A1_HOMING_FRAMES, KIDON_SHOT_A1_TURN_PER_FRAME, KIDON_SHOT_A1_SPEED);
+			break;			
 		case EntityType.KidonShotA2:
+			handleHomingShotState(entity_i, entities, KIDON_SHOT_A2_ACTIVE_FRAMES, KIDON_SHOT_A2_HOMING_FRAMES, KIDON_SHOT_A2_TURN_PER_FRAME, KIDON_SHOT_A2_SPEED);
+			break;
 		case EntityType.AyinShotA2:
+			handleHomingShotState(entity_i, entities, AYIN_SHOT_A2_ACTIVE_FRAMES, AYIN_SHOT_A2_HOMING_FRAMES, AYIN_SHOT_A2_TURN_PER_FRAME, AYIN_SHOT_A2_SPEED);
+			break;
+		case EntityType.AyinHelperB1AttackShot:
+			handleHomingShotState(entity_i, entities, AYIN_HELPER_B1_ATTACK_SHOT_ACTIVE_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_HOMING_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_TURN_PER_FRAME, AYIN_HELPER_B1_ATTACK_SHOT_SPEED);
+			break;
+		case EntityType.AyinHelperB2AttackShot:
+			handleHomingShotState(entity_i, entities, AYIN_HELPER_B2_ATTACK_SHOT_ACTIVE_FRAMES, AYIN_HELPER_B2_ATTACK_SHOT_HOMING_FRAMES, AYIN_HELPER_B2_ATTACK_SHOT_TURN_PER_FRAME, AYIN_HELPER_B2_ATTACK_SHOT_SPEED);
+			break;
 		case EntityType.KidonShotC1Small:			
 		case EntityType.KidonShotC2Small:
-		case EntityType.AyinHelperB1AttackShot:
 		case EntityType.AyinShotC1:
 			if (--entity.framesToStateChange <= 0)
 				entity.shouldBeRemoved = true;
 			break;
 		case EntityType.AyinHelperB1:
 			handleAyinHelperB1State(entity_i, entities);
+			break;
+		case EntityType.AyinHelperB2:
+			handleAyinHelperB2State(entity_i, entities);
 			break;
 		default:
 			throw new Error("Unsupported entity for handleEntityState");
@@ -640,37 +636,14 @@ function handleRenderableState(renderable: Renderable) {
 	--renderable.remainingFrames;
 }
 
+type MovementHandler = { (entity: Entity, player1: Entity, player2: Entity): void };
+const MOVEMENT_HANDLER_MAP = new Map<EntityType, MovementHandler>(
+
+);
+
 function handleEntityMovement(entity: Entity, player1: Entity, player2: Entity) {
-	switch (entity.type) {
-		case EntityType.KidonShotA1:
-			handleHomingShotMovement(entity, player1, player2, KIDON_SHOT_A1_ACTIVE_FRAMES, KIDON_SHOT_A1_HOMING_FRAMES, KIDON_SHOT_A1_TURN_PER_FRAME, KIDON_SHOT_A1_SPEED);
-			break;
-		case EntityType.KidonShotA2:
-			handleHomingShotMovement(entity, player1, player2, KIDON_SHOT_A2_ACTIVE_FRAMES, KIDON_SHOT_A2_HOMING_FRAMES, KIDON_SHOT_A2_TURN_PER_FRAME, KIDON_SHOT_A2_SPEED);
-			break;
-		case EntityType.AyinHelperB1AttackShot:
-			handleHomingShotMovement(entity, player1, player2, AYIN_HELPER_B1_ATTACK_SHOT_ACTIVE_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_HOMING_FRAMES, AYIN_HELPER_B1_ATTACK_SHOT_TURN_PER_FRAME, AYIN_HELPER_B1_ATTACK_SHOT_SPEED);
-			break;
-		case EntityType.AyinShotA2:
-			handleHomingShotMovement(entity, player1, player2, AYIN_SHOT_A2_ACTIVE_FRAMES, AYIN_SHOT_A2_HOMING_FRAMES, AYIN_SHOT_A2_TURN_PER_FRAME, AYIN_SHOT_A2_SPEED);
-			break;
-		case EntityType.KidonShotB1:
-		case EntityType.KidonShotB2:
-		case EntityType.KidonShotC1Big:
-		case EntityType.KidonShotC1Small:
-		case EntityType.KidonShotC2Big:
-		case EntityType.KidonShotC2Small:
-		case EntityType.KidonShip:
-		case EntityType.AyinShip:
-		case EntityType.AyinShotA1:
-		case EntityType.AyinHelperB1:
-		case EntityType.AyinShotC1:
-			entity.x += entity.vx;
-			entity.y += entity.vy;
-			break;
-		default:
-			throw new Error("Unknown entity");
-	}
+	entity.x += entity.vx;
+	entity.y += entity.vy;
 }
 
 
@@ -694,10 +667,13 @@ const ENTITY_SHAPE_MAP = new Map<EntityType, ShapeInfo>([
 	[EntityType.KidonShotC2Small,KIDON_SHOT_C2_SMALL_TRIANGLES],
 	[EntityType.AyinShip,AYIN_SHAPE],
 	[EntityType.AyinShotA1,AYIN_SHOT_A1_TRIANGLES],
+	[EntityType.AyinShotA2, AYIN_SHOT_A2_TRIANGLES],
 	[EntityType.AyinHelperB1,AYIN_HELPER_B1_SHAPE],
 	[EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_SHAPE],
-	[EntityType.AyinShotA2, AYIN_SHOT_A2_TRIANGLES],
-	[EntityType.AyinShotC1, AYIN_SHOT_C1_TRIANGLES]
+	[EntityType.AyinHelperB2,AYIN_HELPER_B2_SHAPE],
+	[EntityType.AyinHelperB2AttackShot, AYIN_HELPER_B2_ATTACK_SHOT_SHAPE],
+	[EntityType.AyinShotC1, AYIN_SHOT_C1_TRIANGLES],
+	[EntityType.AyinShotC2, AYIN_SHOT_C2_TRIANGLES],
 ]);
 assertDefinedForAllEnum(ENTITY_SHAPE_MAP, EntityType);
 	 
@@ -715,7 +691,7 @@ function getWallCollisions(entity: Entity, collisionInfo: WallCollisionInfo): vo
 			let angle = entity.angleInt;
 			point.x = triangles[i];
 			point.y = triangles[i+1];
-			rotateAndTranslate(point, angle, entity.x, entity.y);
+			rotateAndScaleAndTranslate(point, angle, entity.scaleWidthPct, entity.scaleHeightPct, entity.x, entity.y);
 
 			if (MIN_X - point.x > collisionInfo.excessNegativeX) collisionInfo.excessNegativeX = MIN_X - point.x;
 			if (MIN_Y - point.y > collisionInfo.excessNegativeY) collisionInfo.excessNegativeY = MIN_Y - point.y;
@@ -794,10 +770,13 @@ const WALL_COLLISION_HANDLER_MAP = new Map<EntityType, WallCollisionHandler>(
 		 [EntityType.KidonShotC2Big, handleShotWallCollision],
 		 [EntityType.KidonShotC2Small, handleShotWallCollision],
 		 [EntityType.AyinShotA1, handleShotWallCollision],
-		 [EntityType.AyinHelperB1AttackShot, handleShotWallCollision],
 		 [EntityType.AyinShotA2, handleShotWallCollision],
+		 [EntityType.AyinHelperB1AttackShot, handleShotWallCollision],
+		 [EntityType.AyinHelperB2AttackShot, handleShotWallCollision],
 		 [EntityType.AyinShotC1, handleShotWallCollision],
-		 [EntityType.AyinHelperB1, handleHelperWallCollision]]));
+		 [EntityType.AyinShotC2, handleShotWallCollision],
+		 [EntityType.AyinHelperB1, handleHelperWallCollision],
+		 [EntityType.AyinHelperB2, function() {}]]));
 assertDefinedForAllEnum(WALL_COLLISION_HANDLER_MAP, EntityType);
 
 
@@ -848,10 +827,13 @@ const ENTITY_COARSE_RADIUS_MAP = new Map<EntityType, number>(
 	 [EntityType.KidonShotC2Big,  KIDON_SHOT_C2_BIG_COARSE_RADIUS],
 	 [EntityType.KidonShotC2Small,  KIDON_SHOT_C2_SMALL_COARSE_RADIUS],
 	 [EntityType.AyinShotA1, AYIN_SHOT_A1_COARSE_RADIUS],
+	 [EntityType.AyinShotA2, getCoarseRadius(AYIN_SHOT_A2_TRIANGLES)],
 	 [EntityType.AyinHelperB1, AYIN_HELPER_B1_COARSE_RADIUS],
 	 [EntityType.AyinHelperB1AttackShot, getCoarseRadius(AYIN_HELPER_B1_ATTACK_SHOT_SHAPE)],
-	 [EntityType.AyinShotA2, getCoarseRadius(AYIN_SHOT_A2_TRIANGLES)],
-	 [EntityType.AyinShotC1, getCoarseRadius(AYIN_SHOT_C1_TRIANGLES)]]);
+	 [EntityType.AyinHelperB2, getCoarseRadius(AYIN_HELPER_B2_SHAPE)],
+	 [EntityType.AyinHelperB2AttackShot, getCoarseRadius(AYIN_HELPER_B2_ATTACK_SHOT_SHAPE)],
+	 [EntityType.AyinShotC1, getCoarseRadius(AYIN_SHOT_C1_TRIANGLES)],
+	 [EntityType.AyinShotC2, getCoarseRadius(AYIN_SHOT_C2_TRIANGLES)]]);
 assertDefinedForAllEnum(ENTITY_COARSE_RADIUS_MAP, EntityType);
 
 // TODO: Lots of the collision related function here should be moved to spatial.ts
@@ -866,8 +848,8 @@ function coarseCollision(entity1: Entity, entity2: Entity) {
 }
 
 function fineCollision(e1: Entity, e2: Entity) {
-	return fineShapeCollision(e1.x, e1.y, e1.angleInt, ENTITY_SHAPE_MAP.get(e1.type)!,
-							  e2.x, e2.y, e2.angleInt, ENTITY_SHAPE_MAP.get(e2.type)!);
+	return fineShapeCollision(e1.x, e1.y, e1.angleInt, e1.scaleWidthPct, e1.scaleHeightPct, ENTITY_SHAPE_MAP.get(e1.type)!,
+							  e2.x, e2.y, e2.angleInt, e2.scaleWidthPct, e2.scaleHeightPct, ENTITY_SHAPE_MAP.get(e2.type)!);
 }
 
 function handleElasticCollision(state: GameState, entity1: Entity, entity2: Entity, mass1: number, mass2: number) {
@@ -928,12 +910,16 @@ const IS_DISAPPEAR_ON_HIT_MAP = (() => {
 	map.set(EntityType.KidonShotC2Big, true);
 	map.set(EntityType.KidonShotC2Small, true);
 	map.set(EntityType.AyinShotA1, true);
-	map.set(EntityType.AyinHelperB1AttackShot, true);
 	map.set(EntityType.AyinShotA2, false); // First one that is false.
-	map.set(EntityType.AyinShotC1, true); // First one that is false.
+	map.set(EntityType.AyinHelperB1, true);
+	map.set(EntityType.AyinHelperB1AttackShot, true);
+	map.set(EntityType.AyinHelperB2, true);
+	map.set(EntityType.AyinHelperB2AttackShot, true);
+	map.set(EntityType.AyinShotC1, true);
+	map.set(EntityType.AyinShotC2, true);
 	return map;
 })();
-assertDefinedForAllEnumExcept(IS_DISAPPEAR_ON_HIT_MAP, EntityType, new Set<EntityType>(SHIP_AND_HELPER_LIST));
+assertDefinedForAllEnumExcept(IS_DISAPPEAR_ON_HIT_MAP, EntityType, SHIP_SET);
 
 const ACCEL_ON_BLOCK_MAP =
 	new Map<EntityType, number>([[EntityType.KidonShotA1, KIDON_SHOT_A1_ACCEL_ON_BLOCK],
@@ -945,9 +931,11 @@ const ACCEL_ON_BLOCK_MAP =
 								 [EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_ACCEL_ON_BLOCK],
 								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_ACCEL_ON_BLOCK],
 								 [EntityType.AyinShotA1, AYIN_SHOT_A1_ACCEL_ON_BLOCK],
-								 [EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_ACCEL_ON_BLOCK],
 								 [EntityType.AyinShotA2, 0],
+								 [EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_ACCEL_ON_BLOCK],
+								 [EntityType.AyinHelperB2AttackShot, AYIN_HELPER_B2_ATTACK_SHOT_ACCEL_ON_BLOCK],
 								 [EntityType.AyinShotC1, AYIN_SHOT_C1_ACCEL_ON_BLOCK],
+								 [EntityType.AyinShotC2, AYIN_SHOT_C2_ACCEL_ON_BLOCK],
 								]);
 assertDefinedForAllEnumExcept(ACCEL_ON_BLOCK_MAP, EntityType, new Set<EntityType>(SHIP_AND_HELPER_LIST));
 
@@ -961,9 +949,11 @@ const ACCEL_ON_HIT_MAP =
 								 [EntityType.KidonShotC2Big, KIDON_SHOT_C2_BIG_ACCEL_ON_HIT],
 								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_ACCEL_ON_HIT],
 								 [EntityType.AyinShotA1, AYIN_SHOT_A1_ACCEL_ON_HIT],
-								 [EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_ACCEL_ON_HIT],
 								 [EntityType.AyinShotA2, 0],
+								 [EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_ACCEL_ON_HIT],
+								 [EntityType.AyinHelperB2AttackShot, AYIN_HELPER_B2_ATTACK_SHOT_ACCEL_ON_HIT],
 								 [EntityType.AyinShotC1, AYIN_SHOT_C1_ACCEL_ON_HIT],
+								 [EntityType.AyinShotC2, AYIN_SHOT_C2_ACCEL_ON_HIT],
 								]);
 assertDefinedForAllEnumExcept(ACCEL_ON_HIT_MAP, EntityType, new Set<EntityType>(SHIP_AND_HELPER_LIST));
 
@@ -978,8 +968,10 @@ const BLOCKSTUN_FRAMES_MAP =
 								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_BLOCKSTUN_FRAMES],
 								 [EntityType.AyinShotA1, AYIN_SHOT_A1_BLOCKSTUN_FRAMES],
 								 [EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_BLOCKSTUN_FRAMES],
+								 [EntityType.AyinHelperB2AttackShot, AYIN_HELPER_B2_ATTACK_SHOT_BLOCKSTUN_FRAMES],
 								 [EntityType.AyinShotA2, AYIN_SHOT_A2_BLOCKSTUN_FRAMES],
 								 [EntityType.AyinShotC1, AYIN_SHOT_C1_BLOCKSTUN_FRAMES],
+								 [EntityType.AyinShotC2, AYIN_SHOT_C2_BLOCKSTUN_FRAMES],
 								]);
 assertDefinedForAllEnumExcept(BLOCKSTUN_FRAMES_MAP, EntityType, new Set<EntityType>(SHIP_AND_HELPER_LIST));
 
@@ -994,8 +986,10 @@ const HITSTUN_FRAMES_MAP =
 								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_HITSTUN_FRAMES],
 								 [EntityType.AyinShotA1, AYIN_SHOT_A1_HITSTUN_FRAMES],
 								 [EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_HITSTUN_FRAMES],
+								 [EntityType.AyinHelperB2AttackShot, AYIN_HELPER_B2_ATTACK_SHOT_HITSTUN_FRAMES],
 								 [EntityType.AyinShotA2, AYIN_SHOT_A2_HITSTUN_FRAMES],
 								 [EntityType.AyinShotC1, AYIN_SHOT_C1_HITSTUN_FRAMES],
+								 [EntityType.AyinShotC2, AYIN_SHOT_C2_HITSTUN_FRAMES],
 								]);
 assertDefinedForAllEnumExcept(HITSTUN_FRAMES_MAP, EntityType, new Set<EntityType>(SHIP_AND_HELPER_LIST));
 
@@ -1010,8 +1004,10 @@ const BLOCKED_DAMAGE_MAP =
 								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_BLOCKED_DAMAGE],
 								 [EntityType.AyinShotA1, AYIN_SHOT_A1_BLOCKED_DAMAGE],
 								 [EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_BLOCKED_DAMAGE],
+								 [EntityType.AyinHelperB2AttackShot, AYIN_HELPER_B2_ATTACK_SHOT_BLOCKED_DAMAGE],
 								 [EntityType.AyinShotA2, 0],
 								 [EntityType.AyinShotC1, AYIN_SHOT_C1_BLOCKED_DAMAGE],
+								 [EntityType.AyinShotC2, AYIN_SHOT_C2_BLOCKED_DAMAGE],
 								]);
 assertDefinedForAllEnumExcept(BLOCKED_DAMAGE_MAP, EntityType, new Set<EntityType>(SHIP_AND_HELPER_LIST));
 
@@ -1026,8 +1022,10 @@ const HIT_DAMAGE_MAP =
 								 [EntityType.KidonShotC2Small, KIDON_SHOT_C2_SMALL_HIT_DAMAGE],
 								 [EntityType.AyinShotA1, AYIN_SHOT_A1_HIT_DAMAGE],
 								 [EntityType.AyinHelperB1AttackShot, AYIN_HELPER_B1_ATTACK_SHOT_HIT_DAMAGE],
+								 [EntityType.AyinHelperB2AttackShot, AYIN_HELPER_B2_ATTACK_SHOT_HIT_DAMAGE],
 								 [EntityType.AyinShotA2, 0],
 								 [EntityType.AyinShotC1, AYIN_SHOT_C1_HIT_DAMAGE],
+								 [EntityType.AyinShotC2, AYIN_SHOT_C2_HIT_DAMAGE],
 								]);
 assertDefinedForAllEnumExcept(HIT_DAMAGE_MAP, EntityType, new Set<EntityType>(SHIP_AND_HELPER_LIST));
 
@@ -1042,8 +1040,10 @@ const SHOT_DISAPPEARS_ON_IMPACT_MAP =
 								  [EntityType.KidonShotC2Small, true],
 								  [EntityType.AyinShotA1, false],
 								  [EntityType.AyinHelperB1AttackShot, true],
+								  [EntityType.AyinHelperB2AttackShot, true],
 								  [EntityType.AyinShotA2, true],
 								  [EntityType.AyinShotC1, true],
+								  [EntityType.AyinShotC2, false],
 								 ]);
 assertDefinedForAllEnumExcept(SHOT_DISAPPEARS_ON_IMPACT_MAP, EntityType, new Set<EntityType>(SHIP_AND_HELPER_LIST));
 
@@ -1139,8 +1139,8 @@ const COLLISION_HANDLER_MAP = (() => {
 					   EntityType.KidonShotB1, EntityType.KidonShotB2,
 					   EntityType.KidonShotC1Big, EntityType.KidonShotC1Small,
 					   EntityType.KidonShotC2Big, EntityType.KidonShotC2Small,
-					   EntityType.AyinShotA1, EntityType.AyinHelperB1AttackShot,
-					   EntityType.AyinShotA2, EntityType.AyinShotC1];
+					   EntityType.AyinShotA1, EntityType.AyinHelperB1AttackShot, EntityType.AyinHelperB2AttackShot,
+					   EntityType.AyinShotA2, EntityType.AyinShotC1, EntityType.AyinShotC2];
 	
 	
 	let map = new Map<EntityType, Map<EntityType, CollisionHandler>>();
@@ -1284,6 +1284,8 @@ function createExplosionParticles(damage: number, x: number, y: number, state: G
 			x: x,
 			y: y,
 			angleInt: 0,
+			scaleWidthPct: 100,
+			scaleHeightPct: 100,
 			vx: safeCosMul(speed, angle),
 			vy: safeSinMul(speed, angle),
 			ax: -safeCosMul(accel, angle),
@@ -1298,7 +1300,7 @@ function createExplosionParticles(damage: number, x: number, y: number, state: G
 
 function initialEntities(): Entity[] {
 	return [{type: EntityType.AyinShip,
-			 hp: AYIN_MAX_HP,
+			 hp: ayinInfo.maxHp,
 			 batt: 0,
 			 warp: 0,
 			 x: PLAYER1_START_X,
@@ -1308,6 +1310,8 @@ function initialEntities(): Entity[] {
 			 preWarpVx: 0,
 			 preWarpVy: 0,
 			 angleInt: 0,
+			 scaleWidthPct: 100,
+			 scaleHeightPct: 100,
 			 collisionSide: CollisionSide.PlayerOne,
 			 stateDoNotTouchDirectly: EntityState.Idle,
 			 startupMove: null,
@@ -1326,6 +1330,8 @@ function initialEntities(): Entity[] {
 			 preWarpVx: 0,
 			 preWarpVy: 0,
 			 angleInt: 0,
+			 scaleWidthPct: 100,
+			 scaleHeightPct: 100,
 			 collisionSide: CollisionSide.PlayerTwo,
 			 stateDoNotTouchDirectly: EntityState.Idle,
 			 startupMove: null,
@@ -1447,6 +1453,8 @@ export function getFadeFrames(type: EntityType) {
 			return KIDON_SHOT_B2_FADE_FRAMES;
 		case EntityType.AyinShotA1:
 			return AYIN_SHOT_A1_FADE_FRAMES;
+		case EntityType.AyinShotC2:
+			return AYIN_SHOT_C2_FADE_FRAMES;
 		default:
 			return 0;
 	}

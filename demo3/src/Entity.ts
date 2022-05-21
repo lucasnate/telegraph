@@ -14,10 +14,13 @@ export enum EntityType {
 
 	AyinShip,
 	AyinShotA1,
+	AyinShotA2,
 	AyinHelperB1,
 	AyinHelperB1AttackShot,
-	AyinShotA2,
+	AyinHelperB2,
+	AyinHelperB2AttackShot,
 	AyinShotC1,
+	AyinShotC2,
 }
 
 export enum CollisionSide {
@@ -53,6 +56,8 @@ export interface Entity {
 	preWarpVx: number,
 	preWarpVy: number,
 	angleInt: number,
+	scaleWidthPct: number,
+	scaleHeightPct: number,
 	collisionSide: CollisionSide,
 
 	stateDoNotTouchDirectly: EntityState,

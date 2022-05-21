@@ -24,9 +24,13 @@ export interface Point {
 	y: number;
 }
 
-export function rotateAndTranslate(point: Point, angle: number, offsetx: number, offsety: number) {
-	let newx = safeCosMul(point.x, angle) - safeSinMul(point.y, angle) + offsetx;
-	let newy = safeSinMul(point.x, angle) + safeCosMul(point.y, angle) + offsety; 
+export function rotateAndScaleAndTranslate(point: Point, angle: number, scaleWidthPct: number, scaleHeightPct: number, offsetx: number, offsety: number) {
+	let newx = safeCosMul(point.x, angle) - safeSinMul(point.y, angle);
+	let newy = safeSinMul(point.x, angle) + safeCosMul(point.y, angle);
+	newx = safeDiv(newx * scaleWidthPct, 100);
+	newy = safeDiv(newy * scaleHeightPct, 100);
+	newx += offsetx;
+	newy += offsety;
 	point.x = newx;
 	point.y = newy;
 }
@@ -232,8 +236,8 @@ const fttcPoint3: Point = {x: 0, y: 0};
 const fttcPoint4: Point = {x: 0, y: 0};
 const fttcPoint5: Point = {x: 0, y: 0};
 const fttcPoint6: Point = {x: 0, y: 0};
-function fineTransformedTriangleCollision(triangles1: number[], i1: number, e1x: number, e1y: number, e1a: number,
-										  triangles2: number[], i2: number, e2x: number, e2y: number, e2a: number) {
+function fineTransformedTriangleCollision(triangles1: number[], i1: number, e1x: number, e1y: number, e1a: number, e1w: number, e1h: number, 
+										  triangles2: number[], i2: number, e2x: number, e2y: number, e2a: number, e2w: number, e2h: number) {
 	fttcPoint1.x = triangles1[i1+0];
 	fttcPoint1.y = triangles1[i1+1];
 	fttcPoint2.x = triangles1[i1+2];
@@ -246,12 +250,12 @@ function fineTransformedTriangleCollision(triangles1: number[], i1: number, e1x:
 	fttcPoint5.y = triangles2[i2+3];
 	fttcPoint6.x = triangles2[i2+4];
 	fttcPoint6.y = triangles2[i2+5];
-	rotateAndTranslate(fttcPoint1, e1a, e1x, e1y);
-	rotateAndTranslate(fttcPoint2, e1a, e1x, e1y);
-	rotateAndTranslate(fttcPoint3, e1a, e1x, e1y);
-	rotateAndTranslate(fttcPoint4, e2a, e2x, e2y);
-	rotateAndTranslate(fttcPoint5, e2a, e2x, e2y);
-	rotateAndTranslate(fttcPoint6, e2a, e2x, e2y);
+	rotateAndScaleAndTranslate(fttcPoint1, e1a, e1w, e1h, e1x, e1y);
+	rotateAndScaleAndTranslate(fttcPoint2, e1a, e1w, e1h, e1x, e1y);
+	rotateAndScaleAndTranslate(fttcPoint3, e1a, e1w, e1h, e1x, e1y);
+	rotateAndScaleAndTranslate(fttcPoint4, e2a, e2w, e2h, e2x, e2y);
+	rotateAndScaleAndTranslate(fttcPoint5, e2a, e2w, e2h, e2x, e2y);
+	rotateAndScaleAndTranslate(fttcPoint6, e2a, e2w, e2h, e2x, e2y);
 
 	// See https://stackoverflow.com/questions/2778240/detection-of-triangle-collision-in-2d-space
 	return isLineIntersecting(fttcPoint1, fttcPoint2, fttcPoint4, fttcPoint5) ||
@@ -266,15 +270,17 @@ function fineTransformedTriangleCollision(triangles1: number[], i1: number, e1x:
 		isPointInTriangle(fttcPoint4, fttcPoint1, fttcPoint2, fttcPoint3);
 }
 
-function fineTransformedCircleCollision(circles1: number[], i1: number, e1x: number, e1y: number,
-										circles2: number[], i2: number, e2x: number, e2y: number) {
+function fineTransformedCircleCollision(circles1: number[], i1: number, e1x: number, e1y: number, e1w: number, e1h: number, 
+										circles2: number[], i2: number, e2x: number, e2y: number, e2w: number, e2h: number) {
+	assert(e1w === e1h, "Can't scale a circle to an ellipse");
+	assert(e2w === e2h, "Can't scale a circle to an ellipse");
 	const x1 = circles1[i1 + 0] + e1x;
 	const y1 = circles1[i1 + 1] + e1y;
 	const r1 = circles1[i1 + 2];
 	const x2 = circles2[i2 + 0] + e2x;
 	const y2 = circles2[i2 + 1] + e2y;
 	const r2 = circles1[i2 + 2];
-	const dist = (r1 + r2);
+	const dist = safeDiv(r1 * e1w, 100) + safeDiv(r2 * e2w, 100);
 	const dx = x2 - x1;
 	const dy = y2 - y1;
 	return dx * dx + dy * dy < dist * dist;
@@ -284,8 +290,8 @@ const ftTriCircPt1: Point = {x: 0, y: 0};
 const ftTriCircPt2: Point = {x: 0, y: 0};
 const ftTriCircPt3: Point = {x: 0, y: 0};
 const ftTriCircPt4: Point = {x: 0, y: 0};
-function fineTransformedTriangleCircleCollision(triangles1: number[], i1: number, e1x: number, e1y: number, e1a: number,
-												circles2: number[], i2: number, e2x: number, e2y: number) {
+function fineTransformedTriangleCircleCollision(triangles1: number[], i1: number, e1x: number, e1y: number, e1a: number, e1w: number, e1h: number,
+												circles2: number[], i2: number, e2x: number, e2y: number, e2w: number, e2h: number) {
 	ftTriCircPt1.x = triangles1[i1+0];
 	ftTriCircPt1.y = triangles1[i1+1];
 	ftTriCircPt2.x = triangles1[i1+2];
@@ -294,11 +300,12 @@ function fineTransformedTriangleCircleCollision(triangles1: number[], i1: number
 	ftTriCircPt3.y = triangles1[i1+5];
 	ftTriCircPt4.x = circles2[i2+0] + e2x;
 	ftTriCircPt4.y = circles2[i2+1] + e2y;
+	assert(e2w === e2h, "Can't scale a circle to an ellipse");
 	const r = circles2[i2+2];
-	const rsq = r * r;
-	rotateAndTranslate(ftTriCircPt1, e1a, e1x, e1y);
-	rotateAndTranslate(ftTriCircPt2, e1a, e1x, e1y);
-	rotateAndTranslate(ftTriCircPt3, e1a, e1x, e1y);
+	const rsq = safeDiv(r * r * e2w * e2w, 10000);
+	rotateAndScaleAndTranslate(ftTriCircPt1, e1a, e1w, e1h, e1x, e1y);
+	rotateAndScaleAndTranslate(ftTriCircPt2, e1a, e1w, e1h, e1x, e1y);
+	rotateAndScaleAndTranslate(ftTriCircPt3, e1a, e1w, e1h, e1x, e1y);
 
 	// See https://www.phatcode.net/articles.php?id=459, note that isLineCircleIntersecting is
 	// implemented different from they say.
@@ -311,14 +318,14 @@ function fineTransformedTriangleCircleCollision(triangles1: number[], i1: number
 		isLineCircleIntersecting(ftTriCircPt3, ftTriCircPt1, ftTriCircPt4, r);		
 }
 
-export function fineShapeCollision(x1: number, y1: number, a1: number, shape1: ShapeInfo,
-								   x2: number, y2: number, a2: number, shape2: ShapeInfo) {
+export function fineShapeCollision(x1: number, y1: number, a1: number, w1: number, h1: number, shape1: ShapeInfo,
+								   x2: number, y2: number, a2: number, w2: number, h2: number, shape2: ShapeInfo) {
 	if (shape1.type === ShapeInfoType.Triangles && shape2.type === ShapeInfoType.Triangles) {
 		const triangles1 = shape1.data, triangles2 = shape2.data;
 		for (let i1 = 0, l1 = triangles1.length; i1 < l1; i1 += 6) {
 			for (let i2 = 0, l2 = triangles2.length; i2 < l2; i2 += 6) {
-				if (fineTransformedTriangleCollision(triangles1, i1, x1, y1, a1,
-													 triangles2, i2, x2, y2, a2))
+				if (fineTransformedTriangleCollision(triangles1, i1, x1, y1, a1, w1, h1,
+													 triangles2, i2, x2, y2, a2, w2, h2))
 					return true;
 			}
 		}
@@ -326,8 +333,8 @@ export function fineShapeCollision(x1: number, y1: number, a1: number, shape1: S
 		const triangles1 = shape1.data, circles2 = shape2.data;
 		for (let i1 = 0, l1 = triangles1.length; i1 < l1; i1 += 6) {
 			for (let i2 = 0, l2 = circles2.length; i2 < l2; i2 += 3) {
-				if (fineTransformedTriangleCircleCollision(triangles1, i1, x1, y1, a1,
-														   circles2, i2, x2, y2))
+				if (fineTransformedTriangleCircleCollision(triangles1, i1, x1, y1, a1, w1, h1, 
+														   circles2, i2, x2, y2, w2, h2))
 					return true;
 			}
 		}
@@ -335,8 +342,8 @@ export function fineShapeCollision(x1: number, y1: number, a1: number, shape1: S
 		const circles1 = shape1.data, triangles2 = shape2.data;
 		for (let i1 = 0, l1 = circles1.length; i1 < l1; i1 += 3) {
 			for (let i2 = 0, l2 = triangles2.length; i2 < l2; i2 += 3) {
-				if (fineTransformedTriangleCircleCollision(triangles2, i2, x2, y2, a2,
-														   circles1, i1, x1, y1))
+				if (fineTransformedTriangleCircleCollision(triangles2, i2, x2, y2, a2, w2, h2,
+														   circles1, i1, x1, y1, w1, h1))
 					return true;
 			}
 		}
@@ -344,8 +351,8 @@ export function fineShapeCollision(x1: number, y1: number, a1: number, shape1: S
 		const circles1 = shape1.data, circles2 = shape2.data;
 		for (let i1 = 0, l1 = circles1.length; i1 < l1; i1 += 3) {
 			for (let i2 = 0, l2 = circles2.length; i2 < l2; i2 += 3) {
-				if (fineTransformedCircleCollision(circles1, i1, x1, y1,
-												   circles2, i2, x2, y2))
+				if (fineTransformedCircleCollision(circles1, i1, x1, y1, w1, h1, 
+												   circles2, i2, x2, y2, w2, h2))
 					return true;
 			}
 		}
