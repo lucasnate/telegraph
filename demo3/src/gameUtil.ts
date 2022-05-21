@@ -146,10 +146,15 @@ export function doEntityAccel(entity: Entity, accel: number, maxSpeed: number) {
 }
 
 export function tryStartupWeapon(entity_i: number, entities: Entity[], move: Move, info: MoveInfo): boolean {
+	// Note that at the time of writing (2022-05-22) startupFrames == 1 means something
+	// starts immediately.
+	assert(info.startupFrames > 0, "tryStartupWeapon called with non-positive frame count");
 	const entity = entities[entity_i];
 	if (entity.batt < info.battCost)
 		return false;
-
+	if (info.warpCost > 0 && entity.warp < shipInfos.get(entity.type)!.maxWarp)
+		return false;
+	
 	entity.batt -= info.battCost;
 	
 	setEntityState(entity, EntityState.Startup, info.startupFrames);

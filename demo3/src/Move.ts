@@ -4,5 +4,9 @@ export enum Move {
 	A2,
 	B2,
 	C1,
-	C2
+	C2,
+	WarpUp,
+	WarpLeft,
+	WarpRight,
+	WarpDown
 }

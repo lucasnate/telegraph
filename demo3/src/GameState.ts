@@ -1,3 +1,5 @@
+// TODO: If Ayin is hit while doing eye warp, eye warp should stop.
+
 // TODO: This file needs to have float protection
 
 // TODO: thrust is 1, 0.8, 0, 0.9
@@ -128,14 +130,6 @@ export const KIDON_SHOT_C1_SMALL_HIT_DAMAGE = 600;
 
 export const KIDON_SHOT_C1_SPAWN_INTERVAL_FRAMES = 12;
 export const KIDON_SHOT_C1_SPREAD_SPEED = safeDiv(KIDON_SHOT_C1_BIG_HEIGHT, 40);
-
-export const KIDON_DEFENSE_WARP_COST = 60 * 3;
-export const KIDON_DEFENSE_WARP_SPEED = kidonInfo.maxSpeed * 2;
-export const KIDON_DEFENSE_WARP_FRAMES = 30;
-export const KIDON_OFFENSE_WARP_COST = 60 * 10;
-export const KIDON_OFFENSE_WARP_SPEED = kidonInfo.maxSpeed * 3;
-console.log("KIDON_OFFENSE_WARP_SPEED: " + KIDON_OFFENSE_WARP_SPEED.toString());
-export const KIDON_OFFENSE_WARP_FRAMES = 30;
 
 export const KIDON_SHOT_C2_BIG_ACCEL_ON_HIT = safeDiv(kidonInfo.maxSpeed, 3);
 export const KIDON_SHOT_C2_BIG_ACCEL_ON_BLOCK = safeDiv(kidonInfo.maxSpeed, 6);
@@ -281,6 +275,36 @@ function isDoingC2(move: Move, input: number, inputHistory: number[], inputHisto
 	return (input & abstractKeyC2Mask) && !(lastInput & abstractKeyC2Mask) ? true : false;
 }
 
+function isDoingWarpWithKey(keyMask: number, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
+	const lastInput = getLastInput(inputHistory, inputHistoryNextIndex);
+	// if (input & abstractKeyWarpMask) {
+	// 	console.log("DEBUGBUG: " +
+	// 		(!!(input & keyMask)).toString() +
+	// 		(!!(input & abstractKeyWarpMask)).toString() +
+	// 		(!!(lastInput & keyMask)).toString() +
+	// 		(!!(lastInput & abstractKeyWarpMask)).toString() +
+	// 		(!((lastInput & keyMask) && (lastInput && abstractKeyWarpMask))).toString());
+	// }
+	return ((input & keyMask) && (input & abstractKeyWarpMask) &&
+		!((lastInput & keyMask) && (lastInput & abstractKeyWarpMask))) ? true : false;
+}
+
+function isDoingWarpUp(move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
+	return isDoingWarpWithKey(abstractKeyUpMask, input, inputHistory, inputHistoryNextIndex);
+}
+
+function isDoingWarpLeft(move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
+	return isDoingWarpWithKey(abstractKeyLeftMask, input, inputHistory, inputHistoryNextIndex);
+}
+
+function isDoingWarpRight(move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
+	return isDoingWarpWithKey(abstractKeyRightMask, input, inputHistory, inputHistoryNextIndex);
+}
+
+function isDoingWarpDown(move: Move, input: number, inputHistory: number[], inputHistoryNextIndex: number): boolean {
+	return isDoingWarpWithKey(abstractKeyDownMask, input, inputHistory, inputHistoryNextIndex);
+}
+
 // TODO: Where should I put this function?
 export function assertDefinedForAllEnumExcept(map: Map<any, any>, en: any, except: Set<number>) {
 	for (const value1 in en) {
@@ -301,7 +325,11 @@ const MOVE_INPUT_CHECKERS = new Map<Move, MoveInputChecker>(
 	 [Move.B1, isDoingB1],
 	 [Move.A2, isDoingA2],
 	 [Move.C1, isDoingC1],
-	 [Move.C2, isDoingC2]]);
+	 [Move.C2, isDoingC2],
+	 [Move.WarpUp, isDoingWarpUp],
+	 [Move.WarpDown, isDoingWarpDown],
+	 [Move.WarpLeft, isDoingWarpLeft],
+	 [Move.WarpRight, isDoingWarpRight]]);
 assertDefinedForAllEnum(MOVE_INPUT_CHECKERS, Move);
 
 function getLastInput(inputHistory: number[], inputHistoryNextIndex: number) {
@@ -309,15 +337,20 @@ function getLastInput(inputHistory: number[], inputHistoryNextIndex: number) {
 }
 
 
-const AVAILABLE_MOVES = [Move.C2, Move.C1, Move.B2, Move.B1, Move.A2, Move.A1];
-function tryStartupAnyWeapon(entity_i: number, entities: Entity[], input: number, inputHistory: number[], inputHistoryNextIndex: number) {
+const AVAILABLE_MOVES = [Move.C2, Move.C1, Move.B2, Move.B1, Move.A2, Move.A1, Move.WarpUp, Move.WarpDown, Move.WarpLeft, Move.WarpRight];
+function tryStartupAnyMove(entity_i: number, entities: Entity[], usingMove: boolean, input: number, inputHistory: number[], inputHistoryNextIndex: number) {
 	const entity = entities[entity_i];
 	for (var i = 0, l = AVAILABLE_MOVES.length; i < l; ++i) {
 		const move = AVAILABLE_MOVES[i];
 		const inputChecker = MOVE_INPUT_CHECKERS.get(move)!;
 		if (inputChecker(move, input, inputHistory, inputHistoryNextIndex)) {
 			const info = shipInfos.get(entity.type)!.moveInfo.get(move)!;
-			assert(info != null, "Missing move info");
+			if (info == null)
+				continue;
+
+			if (!info.canCancel && usingMove)
+				continue;
+			
 			if (info.onTryStartup(entity_i, entities, move, info))
 				return;
 		}
@@ -331,45 +364,45 @@ function handleEntityKeyboard(entity_i: number, gameState: GameState, input: num
 	let state = getEntityState(entity);
 	const enemy = entities[entity_i === PLAYER1_INDEX ? PLAYER2_INDEX : PLAYER1_INDEX];
 	const stun = state === EntityState.Hitstun || state === EntityState.Blockstun;
-	const usingWeapon = state === EntityState.Startup || state === EntityState.Active || state === EntityState.Recovery;
+	const usingMove = state === EntityState.Startup || state === EntityState.Active || state === EntityState.Recovery;
 	const lastInput = getLastInput(inputHistory, inputHistoryNextIndex);
 	const shipInfo = shipInfos.get(entity.type)!;
 	assert(shipInfo != null, "null shipInfo in handleEntityKeyboard");
 	
-	if (!stun && !usingWeapon && state !== EntityState.Warp && entity.warp === shipInfo.maxWarp) {
-		if ((input & (abstractKeyLeftMask | abstractKeyRightMask)) &&
-			(input & abstractKeyWarpMask) &&
-			(!(lastInput & (abstractKeyLeftMask | abstractKeyRightMask)) ||
-			 !(lastInput & abstractKeyWarpMask))) {
-			entity.preWarpVx = entity.vx;
-			entity.preWarpVy = entity.vy;
-			const angleAdder = safeDiv(MAX_INT_ANGLE, 4);
-			entity.vx = safeCosMul(KIDON_DEFENSE_WARP_SPEED, entity.angleInt + ((input & abstractKeyLeftMask) ? angleAdder : -angleAdder));
-			entity.vy = safeSinMul(KIDON_DEFENSE_WARP_SPEED, entity.angleInt + ((input & abstractKeyLeftMask) ? angleAdder : -angleAdder));
-			entity.warp -= KIDON_DEFENSE_WARP_COST;
-			setEntityState(entity, EntityState.Warp, KIDON_DEFENSE_WARP_FRAMES);
-			return;
-		}
-	}
+	// if (!stun && !usingMove && state !== EntityState.Warp && entity.warp === shipInfo.maxWarp) {
+	// 	if ((input & (abstractKeyLeftMask | abstractKeyRightMask)) &&
+	// 		(input & abstractKeyWarpMask) &&
+	// 		(!(lastInput & (abstractKeyLeftMask | abstractKeyRightMask)) ||
+	// 		 !(lastInput & abstractKeyWarpMask))) {
+	// 		entity.preWarpVx = entity.vx;
+	// 		entity.preWarpVy = entity.vy;
+	// 		const angleAdder = safeDiv(MAX_INT_ANGLE, 4);
+	// 		entity.vx = safeCosMul(KIDON_DEFENSE_WARP_SPEED, entity.angleInt + ((input & abstractKeyLeftMask) ? angleAdder : -angleAdder));
+	// 		entity.vy = safeSinMul(KIDON_DEFENSE_WARP_SPEED, entity.angleInt + ((input & abstractKeyLeftMask) ? angleAdder : -angleAdder));
+	// 		entity.warp -= KIDON_DEFENSE_WARP_COST;
+	// 		setEntityState(entity, EntityState.Warp, KIDON_DEFENSE_WARP_FRAMES);
+	// 		return;
+	// 	}
+	// }
 
-	if (!stun && state !== EntityState.Warp && entity.warp === shipInfo.maxWarp) {
-		if ((input & abstractKeyUpMask) &&
-			(input & abstractKeyWarpMask) &&
-			(!(lastInput & abstractKeyUpMask) ||
-			 !(lastInput & abstractKeyWarpMask))) {
-			entity.angleInt = safeAtan2(enemy.y - entity.y, enemy.x - entity.x);
-			entity.preWarpVx = safeCosMul(shipInfo.maxSpeed, entity.angleInt);
-			entity.preWarpVy = safeSinMul(shipInfo.maxSpeed, entity.angleInt);
-			entity.vx = safeCosMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
-			entity.vy = safeSinMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
-			entity.warp -= KIDON_OFFENSE_WARP_COST;
-			setEntityState(entity, EntityState.Warp, KIDON_OFFENSE_WARP_FRAMES);
-			return;
-		}
-	}
+	// if (!stun && state !== EntityState.Warp && entity.warp === shipInfo.maxWarp) {
+	// 	if ((input & abstractKeyUpMask) &&
+	// 		(input & abstractKeyWarpMask) &&
+	// 		(!(lastInput & abstractKeyUpMask) ||
+	// 		 !(lastInput & abstractKeyWarpMask))) {
+	// 		entity.angleInt = safeAtan2(enemy.y - entity.y, enemy.x - entity.x);
+	// 		entity.preWarpVx = safeCosMul(shipInfo.maxSpeed, entity.angleInt);
+	// 		entity.preWarpVy = safeSinMul(shipInfo.maxSpeed, entity.angleInt);
+	// 		entity.vx = safeCosMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
+	// 		entity.vy = safeSinMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
+	// 		entity.warp -= KIDON_OFFENSE_WARP_COST;
+	// 		setEntityState(entity, EntityState.Warp, KIDON_OFFENSE_WARP_FRAMES);
+	// 		return;
+	// 	}
+	// }
 	
-	if (!stun && !usingWeapon) {
-		tryStartupAnyWeapon(entity_i, entities, input, inputHistory, inputHistoryNextIndex);
+	if (!stun) {
+		tryStartupAnyMove(entity_i, entities, usingMove, input, inputHistory, inputHistoryNextIndex);
 		state = getEntityState(entity);
 	}
 
@@ -403,7 +436,7 @@ function handleEntityKeyboard(entity_i: number, gameState: GameState, input: num
 			};
 			renderables.push(renderable);
 		}
-	} else if ((input & abstractKeyDownMask) && !stun) {
+	} else if ((input & abstractKeyDownMask) && !(input & abstractKeyWarpMask) && !stun) {
 		let norm2 = norm2sq(entity.vx, entity.vy);
 		if (norm2 < shipInfo.accel * shipInfo.accel) {
 			entity.vx = 0;
@@ -423,11 +456,11 @@ function handleEntityKeyboard(entity_i: number, gameState: GameState, input: num
 		entity.angleInt = normalizeAngle(entity.angleInt - KIDON_TURN_PER_FRAME);
 	}
 		
-	if ((input & abstractKeyBlueMask) && !(lastInput & abstractKeyBlueMask) && !usingWeapon) {
+	if ((input & abstractKeyBlueMask) && !usingMove) {
 		entity.color = EntityColor.Blue;
 	}
 
-	if ((input & abstractKeyRedMask) && !(lastInput & abstractKeyRedMask) && !usingWeapon) {
+	if ((input & abstractKeyRedMask) && !usingMove) {
 		entity.color = EntityColor.Red;
 	}
 

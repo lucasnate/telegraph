@@ -142,6 +142,8 @@ export const ayinInfo: ShipInfo = {
 			startupFrames: AYIN_SHOT_A1_STARTUP_FRAMES,
 			recoveryFrames: AYIN_SHOT_A1_RECOVERY_FRAMES, // TODO: This value is duplicated in the parameters for activateShot
 			battCost: (AYIN_SHOT_A1_STARTUP_FRAMES + AYIN_SHOT_A1_RECOVERY_FRAMES) * 2,
+			warpCost: 0,
+			canCancel: false,
 			onTryStartup: tryStartupWeapon,
 			onActivation: (entity_i: number, entities: Entity[]) => {
 				activateShot(entity_i, entities, EntityType.AyinShotA1, AYIN_SHOT_A1_SPEED,
@@ -153,6 +155,8 @@ export const ayinInfo: ShipInfo = {
 			startupFrames: AYIN_HELPER_B1_LAUNCH_STARTUP_FRAMES,
 			recoveryFrames: AYIN_HELPER_B1_RECOVERY_FRAMES,
 			battCost: (AYIN_HELPER_B1_LAUNCH_STARTUP_FRAMES + AYIN_HELPER_B1_RECOVERY_FRAMES) * 3,
+			warpCost: 0,
+			canCancel: false,
 			onTryStartup: tryStartupWeapon,
 			onActivation: (entity_i: number, entities: Entity[]) => {
 				activateShot(entity_i, entities, EntityType.AyinHelperB1, AYIN_HELPER_B1_LAUNCH_SPEED,
@@ -164,6 +168,8 @@ export const ayinInfo: ShipInfo = {
 			startupFrames: AYIN_SHOT_A2_STARTUP_FRAMES,
 			recoveryFrames: AYIN_SHOT_A2_RECOVERY_FRAMES,
 			battCost: AYIN_SHOT_A2_BATT_COST,
+			warpCost: 0,
+			canCancel: false,
 			onTryStartup: tryStartupWeapon,
 			onActivation: (entity_i: number, entities: Entity[]) => {
 				activateShot(entity_i, entities, EntityType.AyinShotA2, AYIN_SHOT_A2_SPEED,
@@ -175,6 +181,8 @@ export const ayinInfo: ShipInfo = {
 			startupFrames: AYIN_HELPER_B2_STARTUP_FRAMES,
 			recoveryFrames: AYIN_HELPER_B2_RECOVERY_FRAMES,
 			battCost: (AYIN_HELPER_B2_STARTUP_FRAMES + AYIN_HELPER_B2_RECOVERY_FRAMES) * 4,
+			warpCost: 0,
+			canCancel: false,
 			onTryStartup: tryStartupAyinB2,
 			onActivation: (entity_i: number, entities: Entity[]) => {
 				activateShot(entity_i, entities, EntityType.AyinHelperB2, AYIN_HELPER_B2_LAUNCH_SPEED, AYIN_HELPER_B2_ACTIVE_FRAMES, AYIN_HELPER_B2_RECOVERY_FRAMES, entities[entity_i].color,
@@ -185,6 +193,8 @@ export const ayinInfo: ShipInfo = {
 			startupFrames: AYIN_SHOT_C1_STARTUP_FRAMES,
 			recoveryFrames: AYIN_SHOT_C1_RECOVERY_FRAMES,
 			battCost: (AYIN_SHOT_C1_STARTUP_FRAMES + AYIN_SHOT_C1_RECOVERY_FRAMES) * 3,
+			warpCost: 0,
+			canCancel: false,
 			onTryStartup: tryStartupWeapon,
 			onActivation: (entity_i: number, entities: Entity[]) => {
 				for (let i = 0, l = entities.length; i < l; ++i) {
@@ -207,6 +217,8 @@ export const ayinInfo: ShipInfo = {
 			startupFrames: AYIN_SHOT_C2_STARTUP_FRAMES,
 			recoveryFrames: AYIN_SHOT_C2_RECOVERY_FRAMES,
 			battCost: (AYIN_SHOT_C2_STARTUP_FRAMES + AYIN_SHOT_C2_RECOVERY_FRAMES) * 3,
+			warpCost: 0,
+			canCancel: false,
 			onTryStartup: tryStartupWeapon,
 			onActivation: (entity_i: number, entities: Entity[]) => {
 				let chosen_i = -1;

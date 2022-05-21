@@ -8,6 +8,8 @@ export interface MoveInfo {
 	startupFrames: number,
 	recoveryFrames: number,
 	battCost: number,
+	warpCost: number,
 	onTryStartup: TryStartupHandler,
-	onActivation: ActivationHandler
+	onActivation: ActivationHandler,
+	canCancel: boolean
 }
