@@ -4,9 +4,13 @@ import { assert } from '../../src/util/assert';
 import { shipInfos } from './shipInfos';
 import { Move } from './Move';
 import { MoveInfo } from './MoveInfo';
+import { Renderable, RenderableType } from './Renderable';
 
 export const PLAYER1_INDEX = 0;
 export const PLAYER2_INDEX = 1;
+
+const WARP_AFTER_IMAGE_SPAWN_FRAMES = 5;
+export const WARP_AFTER_IMAGE_TTL_FRAMES = 30;
 
 export function turnToWantedAngle(src: Entity, dest: Entity, maxTurn: number) {
     const desiredAngle = safeAtan2(dest.y - src.y, dest.x - src.x);
@@ -102,8 +106,6 @@ export function disableShipWarp(entity: Entity) {
 	if (entity.stateDoNotTouchDirectly !== EntityState.Warp)
 		return;
 
-	assert(isShip(entity.type), "unsupported type for warp disabling");
-
 	entity.vx = entity.preWarpVx;
 	entity.vy = entity.preWarpVy;
 	entity.stateDoNotTouchDirectly = EntityState.Idle;
@@ -156,8 +158,41 @@ export function tryStartupWeapon(entity_i: number, entities: Entity[], move: Mov
 		return false;
 	
 	entity.batt -= info.battCost;
+	entity.warp -= info.warpCost;
 	
 	setEntityState(entity, EntityState.Startup, info.startupFrames);
 	entity.startupMove = move;
 	return true;
+}
+
+const ENTITY_TO_RENDERABLE_MAP = new Map<EntityType, RenderableType>([
+	[EntityType.KidonShip, RenderableType.KidonWarpAfterImage],
+	[EntityType.AyinHelperB1, RenderableType.AyinHelperB1WarpAfterImage]
+]);
+	
+export function renderEntityWarp(entity: Entity, renderables: Renderable[]) {
+	const renderableType = ENTITY_TO_RENDERABLE_MAP.get(entity.type)!;
+	if (renderableType == null)
+		throw new Error("renderEntityWarp called on unsupported entity type: " + entity.type.toString());
+	
+	if (entity.framesToStateChange % WARP_AFTER_IMAGE_SPAWN_FRAMES === 0) {
+		const renderable = {
+			type: renderableType,
+			x: entity.x,
+			y: entity.y,
+			angleInt: entity.angleInt,
+			vx: 0,
+			vy: 0,
+			ax: 0,
+			ay: 0,
+			remainingFrames: WARP_AFTER_IMAGE_TTL_FRAMES,
+			totalFrames: WARP_AFTER_IMAGE_TTL_FRAMES,
+			sizePct: 100
+		};
+		renderables.push(renderable);
+	}	
+}
+
+export function isUsingMove(state: EntityState) {
+	return state === EntityState.Startup || state === EntityState.Active || state === EntityState.Recovery;
 }

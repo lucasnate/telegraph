@@ -45,6 +45,7 @@ class Game {
     private remotePlayerHandle: number | null = null;
 	private framesToSleep: number = 0;
 
+	private hadException: boolean = false;
 	
 	constructor(peer: Peer, remotePeerId: string, localPlayerNumber: number, localSyncData: any,
 				syncCallback: (winningSyncData: GameSyncData) => void) {
@@ -135,10 +136,21 @@ class Game {
     }
 
 
+	loop(isRender: boolean): void {
+		if (this.hadException)
+			return;
+		try {
+			this.loopWithoutCatch(isRender);
+		} catch (err) {
+			this.hadException = true;
+			throw err;
+		}
+	}
+	
     /**
      * The "real" (RAF-bound) run loop.
      */
-	loop(isRender: boolean): void {
+	loopWithoutCatch(isRender: boolean): void {
         // Compute delta and elapsed time
         const time = performance.now();
         const delta = time - this.loopLastTime;

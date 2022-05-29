@@ -161,7 +161,6 @@ export const kidonInfo: ShipInfo = {
 	 			entity.preWarpVy = safeSinMul(kidonInfo.maxSpeed, entity.angleInt);
 	 			entity.vx = safeCosMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
 	 			entity.vy = safeSinMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
-	 			entity.warp -= KIDON_OFFENSE_WARP_COST;
 	 			setEntityState(entity, EntityState.Warp, KIDON_OFFENSE_WARP_FRAMES);
 			}
 		}],
@@ -193,7 +192,6 @@ function activateDefensiveWarp(entity_i: number, entities: Entity[], isRight: bo
 	const angleAdder = safeDiv(MAX_INT_ANGLE, 4);
 	entity.vx = safeCosMul(KIDON_DEFENSE_WARP_SPEED, entity.angleInt + (isRight ? -angleAdder : angleAdder));
 	entity.vy = safeSinMul(KIDON_DEFENSE_WARP_SPEED, entity.angleInt + (isRight ? -angleAdder : angleAdder));
-	entity.warp -= KIDON_DEFENSE_WARP_COST;
 	setEntityState(entity, EntityState.Warp, KIDON_DEFENSE_WARP_FRAMES);
 }
 

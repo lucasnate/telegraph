@@ -1,11 +1,15 @@
 import { mat4, vec2, vec3 } from 'gl-matrix';
-import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, Renderable, RenderableType, WinScreen, assertDefinedForAllEnum, getFadeFrames, THRUST_FRAMES, WARP_AFTER_IMAGE_TTL_FRAMES } from './GameState';
-import { MAX_INT_ANGLE, max, min } from './safeCalc';
-import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES, AYIN_RENDER_TRIANGLES, AYIN_PUPIL_TRIANGLES, AYIN_SHOT_A1_TRIANGLES, AYIN_HELPER_B1_RENDER_TRIANGLES, AYIN_HELPER_B1_ATTACK_SHOT_SHAPE, AYIN_SHOT_A2_TRIANGLES, AYIN_SHOT_C1_TRIANGLES, AYIN_SHOT_C2_TRIANGLES, AYIN_HELPER_B2_RENDER_TRIANGLES, AYIN_HELPER_B2_ATTACK_SHOT_SHAPE } from './shipShapes';
+import { Renderable, RenderableType } from './Renderable';
+import { GameState, MIN_X, MIN_Y, MAX_X, MAX_Y, WORLD_WIDTH, WORLD_HEIGHT, WinScreen, assertDefinedForAllEnum, getFadeFrames, THRUST_FRAMES } from './GameState';
+import { MAX_INT_ANGLE, max, min, safeAtan2, safeSinMul, safeCosMul, norm2sq } from './safeCalc';
+import { KIDON_TRIANGLES, KIDON_SHOT_A1_TRIANGLES, KIDON_SHOT_A2_TRIANGLES, KIDON_SHOT_B1_TRIANGLES, KIDON_SHOT_B2_TRIANGLES, KIDON_SHOT_C1_BIG_TRIANGLES, KIDON_SHOT_C1_SMALL_TRIANGLES, KIDON_SHOT_C2_BIG_TRIANGLES, KIDON_SHOT_C2_SMALL_TRIANGLES, KIDON_COARSE_RECT, PARTICLE_TRIANGLES, AYIN_RENDER_TRIANGLES, AYIN_PUPIL_TRIANGLES, AYIN_HELPER_B1_PUPIL_TRIANGLES, AYIN_SHOT_A1_TRIANGLES, AYIN_HELPER_B1_RENDER_TRIANGLES, AYIN_HELPER_B1_ATTACK_SHOT_SHAPE, AYIN_SHOT_A2_TRIANGLES, AYIN_SHOT_C1_TRIANGLES, AYIN_SHOT_C2_TRIANGLES, AYIN_HELPER_B2_RENDER_TRIANGLES, AYIN_HELPER_B2_ATTACK_SHOT_SHAPE, AYIN_HELPER_B2_PUPIL_TRIANGLES } from './shipShapes';
 import { Entity, EntityType, EntityState, EntityColor, CollisionSide } from './Entity';
+import { AYIN_HELPER_B1_ATTACK_STARTUP_FRAMES } from './ayin';
 import { shipInfos } from './shipInfos';
 import { assert } from '../../src/util/assert';
-import { PLAYER1_INDEX, PLAYER2_INDEX, getEntityState } from './gameUtil';
+import { Color } from './Color';
+import { PLAYER1_INDEX, PLAYER2_INDEX, getEntityState, WARP_AFTER_IMAGE_TTL_FRAMES } from './gameUtil';
+import { getCollisionSidePossiblyFromBatt } from './ayin';
 
 // Vertex shader program
 const VERTEX_SHADER_SOURCE = `
@@ -45,15 +49,11 @@ void main() {
 `
 
 enum AttachedType {
-	Pupil
+	Pupil,
+	PupilB1,
+	PupilB2
 }
 
-interface Color {
-	r: number;
-	g: number;
-	b: number;
-	a: number;
-}
 interface AttribLocations {
 	vertexPosition: number;
 }
@@ -84,6 +84,7 @@ interface Buffers {
 	grid: BufferWithCount;
 	stars: BufferWithCount;
 	margin: BufferWithCount;
+	dynamic: BufferWithCount;
 };
 
 let debug = 0;
@@ -419,19 +420,24 @@ const ENTITY_COLOR_HANDLER_MAP = (() => {
 
 function getPupilColor(type: AttachedType, color1: Color, color2: Color, color3: Color): void {
 	color1.r = color2.r = color3.r = color1.g = color2.g = color3.g = color1.b = color2.b = color3.b = 0;
+	color1.a = color2.a = color3.a = 1;
 }
 
 const ATTACHED_COLOR_HANDLER_MAP = new Map<AttachedType, AttachedColorHandler>(
-	[[AttachedType.Pupil, getPupilColor]]);
+	[[AttachedType.Pupil, getPupilColor],
+	 [AttachedType.PupilB1, getPupilColor],
+	 [AttachedType.PupilB2, getPupilColor]]);
 
 const RENDERABLE_COLOR_HANDLER_MAP = new Map<RenderableType, RenderableColorHandler>(
 	[[RenderableType.ThrustParticle, getParticleColor],
 	 [RenderableType.BlueExplosionParticle, getParticleColor],
 	 [RenderableType.RedExplosionParticle, getParticleColor],
 	 [RenderableType.WhiteExplosionParticle, getParticleColor],
-	 [RenderableType.KidonWarpAfterImage, getAfterImageColor]]);
+	 [RenderableType.KidonWarpAfterImage, getAfterImageColor],
+	 [RenderableType.AyinHelperB1WarpAfterImage, getAfterImageColor]]);
 
 assertDefinedForAllEnum(ENTITY_COLOR_HANDLER_MAP, EntityType);
+assertDefinedForAllEnum(RENDERABLE_COLOR_HANDLER_MAP, RenderableType);
 
 function getEntityColor(entity: Entity, color1: Color, color2: Color, color3: Color) {
 	return ENTITY_COLOR_HANDLER_MAP.get(entity.type)!(entity, color1, color2, color3);
@@ -459,6 +465,12 @@ const TITLE_VSEP_RATIO = 1;
 const TITLE_RATIO = 0.5;
 const COMBO_HITS_RATIO = 0.25;
 const MAX_GLOW_FRAMES = 16;
+
+const SUBVEIN_COUNT = 11;
+const SUBVEIN_ANGLE_OFFSET = MAX_INT_ANGLE / 12;
+const SUBVEIN_WIDTH_FACTOR = 1/2;
+const SUBVEIN_LENGTH_FACTOR = 1/20;
+
 
 export enum BarType {
 	HP,
@@ -585,6 +597,7 @@ export class Renderer {
 
 	createBuffers(): Buffers  {
 		const kidonTrianglesBuf = this.bufferWithCount(KIDON_TRIANGLES.data);
+		const ayinHelperB1TrianglesBuf = this.bufferWithCount(AYIN_HELPER_B1_RENDER_TRIANGLES.data);
 		const particleBuf = this.bufferWithCount(PARTICLE_TRIANGLES);
 		let map1 = new Map([[EntityType.KidonShip, kidonTrianglesBuf],
 							[EntityType.KidonShotA1, this.bufferWithCount(KIDON_SHOT_A1_TRIANGLES.data)],
@@ -597,7 +610,7 @@ export class Renderer {
 							[EntityType.KidonShotC2Small, this.bufferWithCount(KIDON_SHOT_C2_SMALL_TRIANGLES.data)],
 							[EntityType.AyinShip, this.bufferWithCount(AYIN_RENDER_TRIANGLES.data)],
 							[EntityType.AyinShotA1, this.bufferWithCount(AYIN_SHOT_A1_TRIANGLES.data)],
-							[EntityType.AyinHelperB1, this.bufferWithCount(AYIN_HELPER_B1_RENDER_TRIANGLES.data)],
+							[EntityType.AyinHelperB1, ayinHelperB1TrianglesBuf],
 							[EntityType.AyinHelperB1AttackShot, this.bufferWithCount(AYIN_HELPER_B1_ATTACK_SHOT_SHAPE.data)],
 							[EntityType.AyinHelperB2, this.bufferWithCount(AYIN_HELPER_B2_RENDER_TRIANGLES.data)],
 							[EntityType.AyinHelperB2AttackShot, this.bufferWithCount(AYIN_HELPER_B2_ATTACK_SHOT_SHAPE.data)],
@@ -608,11 +621,14 @@ export class Renderer {
 							[RenderableType.RedExplosionParticle, particleBuf],
 							[RenderableType.BlueExplosionParticle, particleBuf],
 							[RenderableType.WhiteExplosionParticle, particleBuf],
-							[RenderableType.KidonWarpAfterImage, kidonTrianglesBuf]]);
+							[RenderableType.KidonWarpAfterImage, kidonTrianglesBuf],
+							[RenderableType.AyinHelperB1WarpAfterImage, ayinHelperB1TrianglesBuf]]);
 		assertDefinedForAllEnum(map1, EntityType);
 		assertDefinedForAllEnum(map2, RenderableType);
 
-		let map3 = new Map([[AttachedType.Pupil, this.bufferWithCount(AYIN_PUPIL_TRIANGLES.data)]]);
+		let map3 = new Map([[AttachedType.Pupil, this.bufferWithCount(AYIN_PUPIL_TRIANGLES.data)],
+							[AttachedType.PupilB1, this.bufferWithCount(AYIN_HELPER_B1_PUPIL_TRIANGLES.data)],
+							[AttachedType.PupilB2, this.bufferWithCount(AYIN_HELPER_B2_PUPIL_TRIANGLES.data)]]);
 		assertDefinedForAllEnum(map3, AttachedType);
 		
 		return {
@@ -622,6 +638,7 @@ export class Renderer {
 			grid: this.bufferWithCount(GRID_LINES),
 			stars: this.bufferWithCount(STAR_TRIANGLES),
 			margin: this.bufferWithCount(MARGIN_TRIANGLES),
+			dynamic: {buffer: this.gl.createBuffer()!, count: 0},
 		};
 	}
 	
@@ -785,6 +802,55 @@ export class Renderer {
 		this.gl.uniformMatrix4fv(this.programInfo.uniformLocations.modelSpecificMatrix, false, matrix);
 		this.gl.drawArrays(this.gl.TRIANGLES, 0, bufWithCnt.count);
 	}
+
+	ayinVeinArray = new Float32Array(12 * (1 + SUBVEIN_COUNT));
+	setDynamicToAyinVein(owner: Entity, helper: Entity) {
+		const mainVeinLength = Math.sqrt(norm2sq(owner.x - helper.x, owner.y - helper.y));
+		const mainVeinWidth = 100;
+		const ayinVeinArray = this.ayinVeinArray;
+		let offset = 0;
+		this.writeLineToArray(ayinVeinArray, offset, owner.x, owner.y, helper.x, helper.y, mainVeinWidth);
+		offset += 12;
+		const angle = safeAtan2(helper.y - owner.y, helper.x - owner.x);
+		for (let i = 0; i < SUBVEIN_COUNT; ++i) {
+			const startX = owner.x + (helper.x - owner.x) * (i + 1) / (SUBVEIN_COUNT + 2);
+			const startY = owner.y + (helper.y - owner.y) * (i + 1) / (SUBVEIN_COUNT + 2);
+			const subVeinWidth = mainVeinWidth * SUBVEIN_WIDTH_FACTOR;
+			const subVeinLength = mainVeinLength * SUBVEIN_LENGTH_FACTOR;
+			const subVeinAngle = Math.floor(angle + ((i % 2) * 2 - 1) * SUBVEIN_ANGLE_OFFSET);
+			const subVeinEndX = startX + safeCosMul(subVeinLength, subVeinAngle);
+			const subVeinEndY = startY + safeSinMul(subVeinLength, subVeinAngle);
+			this.writeLineToArray(ayinVeinArray, offset, startX, startY, subVeinEndX, subVeinEndY, subVeinWidth);
+			offset += 12;
+		}
+		assert(offset === ayinVeinArray.length, "Bad vein array length");
+		this.setDynamicToArray(ayinVeinArray, offset / 2);
+	}
+
+	writeLineToArray(array: Float32Array, offset: number, x1: number, y1: number, x2: number, y2: number, width: number) {
+		const trivial = x1 === x2 && y1 === y2;
+		const angle = trivial ? 0 : safeAtan2(y2 - y1, x2 - x1) + MAX_INT_ANGLE / 4;
+		const sin = trivial ? 0 : safeSinMul(width, angle);
+		const cos = trivial ? 0 : safeCosMul(width, angle);
+		array[offset + 0]  = x1 + cos;
+		array[offset + 1]  = y1 + sin;
+		array[offset + 2]  = x1 - cos;
+		array[offset + 3]  = y1 - sin;
+		array[offset + 4]  = x2 - cos;
+		array[offset + 5]  = y2 - sin;
+		array[offset + 6]  = x2 - cos;
+		array[offset + 7]  = y2 - sin;		
+		array[offset + 8]  = x2 + cos;
+		array[offset + 9]  = y2 + sin;
+		array[offset + 10] = x1 + cos;
+		array[offset + 11] = y1 + sin;
+	}
+	
+	setDynamicToArray(array: Float32Array, count: number) {
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffers.dynamic.buffer);
+		this.gl.bufferData(this.gl.ARRAY_BUFFER, array, this.gl.DYNAMIC_DRAW);
+		this.buffers.dynamic.count = count;
+	}
 	
 	renderEntities(state: GameState) {
 		let color1: Color = {r: 0, g: 0, b: 0, a: 0};
@@ -802,6 +868,29 @@ export class Renderer {
 				this.renderEntity(entity.x, entity.y, entity.angleInt, 100, 100,
 								  this.buffers.attachedBuffers.get(AttachedType.Pupil)!,
 								  color1, color2, color3);
+			} else if (entity.type === EntityType.AyinHelperB1) {
+				const owner = getCollisionSidePossiblyFromBatt(entity) === CollisionSide.PlayerOne
+					? state.entities[PLAYER1_INDEX] : state.entities[PLAYER2_INDEX];
+				this.setDynamicToAyinVein(owner, entity);
+				color1.a = color2.a = color3.a = 0.1;
+				this.renderEntity(0, 0, 0, 100, 100, this.buffers.dynamic, color1, color2, color3);
+								  
+				getAttachedColor(AttachedType.PupilB1, color1, color2, color3);
+				let size = 100;
+				switch (getEntityState(entity)) {
+					case EntityState.Startup:
+						size = (AYIN_HELPER_B1_ATTACK_STARTUP_FRAMES - entity.framesToStateChange) * 100 / AYIN_HELPER_B1_ATTACK_STARTUP_FRAMES;
+					case EntityState.Idle:
+					case EntityState.Active:
+						this.renderEntity(entity.x, entity.y, entity.angleInt, size, size,
+										  this.buffers.attachedBuffers.get(AttachedType.PupilB1)!,
+										  color1, color2, color3);				
+				}
+			} else if (entity.type === EntityType.AyinHelperB2) {
+				getAttachedColor(AttachedType.PupilB2, color1, color2, color3);
+				this.renderEntity(entity.x, entity.y, entity.angleInt, 100, 100,
+								  this.buffers.attachedBuffers.get(AttachedType.PupilB2)!,
+								  color1, color2, color3);				
 			}
 		}
 		

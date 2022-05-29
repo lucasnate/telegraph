@@ -24,7 +24,8 @@ import { ActivationHandler } from './ActivationHandler';
 import { EntityType, CollisionSide, EntityState, EntityColor, Entity } from './Entity';
 import { KIDON_SHOT_A1_RECOVERY_FRAMES, KIDON_SHOT_A2_RECOVERY_FRAMES, KIDON_SHOT_B1_ACTIVE_FRAMES, KIDON_SHOT_B2_ACTIVE_FRAMES, KIDON_SHOT_C1_ACTIVE_FRAMES, KIDON_SHOT_A2_SPEED, KIDON_SHOT_A2_ACTIVE_FRAMES, KIDON_SHOT_C1_RECOVERY_FRAMES, KIDON_SHOT_C2_RECOVERY_FRAMES, KIDON_SHOT_A2_STARTUP_FRAMES, KIDON_SHOT_C1_STARTUP_FRAMES, KIDON_SHOT_C2_STARTUP_FRAMES, KIDON_SHOT_C2_BIG_ACTIVE_FRAMES, KIDON_SHOT_A1_ACTIVE_FRAMES, KIDON_SHOT_A1_SPEED, KIDON_SHOT_B2_RECOVERY_FRAMES, KIDON_SHOT_B1_RECOVERY_FRAMES } from './kidon';
 import { AYIN_SHOT_A1_RECOVERY_FRAMES, AYIN_HELPER_B1_ATTACK_STARTUP_FRAMES, AYIN_SHOT_A2_BLOCKSTUN_FRAMES, AYIN_SHOT_A2_HITSTUN_FRAMES, AYIN_SHOT_A2_ACTIVE_FRAMES, AYIN_SHOT_A2_HOMING_FRAMES, AYIN_SHOT_A2_TURN_PER_FRAME, AYIN_SHOT_A2_SPEED } from './ayin';
-import { getEntityState, setEntityState, disableShipWarp, PLAYER1_INDEX, PLAYER2_INDEX, turnToWantedAngle, SHIP_SET, SHIP_LIST, handleHomingShotState, doEntityAccel } from './gameUtil';
+import { getEntityState, setEntityState, disableShipWarp, PLAYER1_INDEX, PLAYER2_INDEX, turnToWantedAngle, SHIP_SET, SHIP_LIST, handleHomingShotState, doEntityAccel, renderEntityWarp, isUsingMove } from './gameUtil';
+import { Renderable, RenderableType } from './Renderable';
 
 shipInfos.set(EntityType.KidonShip, kidonInfo);
 shipInfos.set(EntityType.AyinShip, ayinInfo);
@@ -164,8 +165,6 @@ export const AYIN_SHOT_A1_BLOCKSTUN_FRAMES = AYIN_SHOT_A1_RECOVERY_FRAMES + AYIN
 assert(AYIN_SHOT_A1_BLOCKSTUN_FRAMES >= 0, "Negative frames");
 export const AYIN_SHOT_A1_FADE_FRAMES = 20;
 
-export const WARP_AFTER_IMAGE_SPAWN_FRAMES = 5;
-export const WARP_AFTER_IMAGE_TTL_FRAMES = 30;
 
 export const MIN_EXPLOSION_PARTICLE_COUNT = 4;
 export const MAX_EXPLOSION_PARTICLE_COUNT = 24;
@@ -200,13 +199,6 @@ const FRAMES_TO_IDLE_AFTER_UP = 1;
 export interface GameSyncData extends SyncData {}
 
 
-export enum RenderableType {
-	ThrustParticle,
-	WhiteExplosionParticle,
-	BlueExplosionParticle,
-	RedExplosionParticle,
-	KidonWarpAfterImage
-}
 
 export enum WinScreen {
 	None,
@@ -215,19 +207,6 @@ export enum WinScreen {
 	Draw
 }
 
-export interface Renderable {
-	type: RenderableType,
-	x: number,
-	y: number,
-	angleInt: number,
-	vx: number,
-	vy: number,
-	ax: number,
-	ay: number,
-	remainingFrames: number,
-	totalFrames: number,
-	sizePct: number
-}
 
 export interface GameState {
 	entities: Entity[],
@@ -338,7 +317,7 @@ function getLastInput(inputHistory: number[], inputHistoryNextIndex: number) {
 
 
 const AVAILABLE_MOVES = [Move.C2, Move.C1, Move.B2, Move.B1, Move.A2, Move.A1, Move.WarpUp, Move.WarpDown, Move.WarpLeft, Move.WarpRight];
-function tryStartupAnyMove(entity_i: number, entities: Entity[], usingMove: boolean, input: number, inputHistory: number[], inputHistoryNextIndex: number) {
+function tryStartupAnyMove(entity_i: number, entities: Entity[], input: number, inputHistory: number[], inputHistoryNextIndex: number) {
 	const entity = entities[entity_i];
 	for (var i = 0, l = AVAILABLE_MOVES.length; i < l; ++i) {
 		const move = AVAILABLE_MOVES[i];
@@ -348,7 +327,7 @@ function tryStartupAnyMove(entity_i: number, entities: Entity[], usingMove: bool
 			if (info == null)
 				continue;
 
-			if (!info.canCancel && usingMove)
+			if (!info.canCancel && isUsingMove(getEntityState(entity)))
 				continue;
 			
 			if (info.onTryStartup(entity_i, entities, move, info))
@@ -364,45 +343,13 @@ function handleEntityKeyboard(entity_i: number, gameState: GameState, input: num
 	let state = getEntityState(entity);
 	const enemy = entities[entity_i === PLAYER1_INDEX ? PLAYER2_INDEX : PLAYER1_INDEX];
 	const stun = state === EntityState.Hitstun || state === EntityState.Blockstun;
-	const usingMove = state === EntityState.Startup || state === EntityState.Active || state === EntityState.Recovery;
+	const usingMove = isUsingMove(getEntityState(entity));
 	const lastInput = getLastInput(inputHistory, inputHistoryNextIndex);
 	const shipInfo = shipInfos.get(entity.type)!;
 	assert(shipInfo != null, "null shipInfo in handleEntityKeyboard");
-	
-	// if (!stun && !usingMove && state !== EntityState.Warp && entity.warp === shipInfo.maxWarp) {
-	// 	if ((input & (abstractKeyLeftMask | abstractKeyRightMask)) &&
-	// 		(input & abstractKeyWarpMask) &&
-	// 		(!(lastInput & (abstractKeyLeftMask | abstractKeyRightMask)) ||
-	// 		 !(lastInput & abstractKeyWarpMask))) {
-	// 		entity.preWarpVx = entity.vx;
-	// 		entity.preWarpVy = entity.vy;
-	// 		const angleAdder = safeDiv(MAX_INT_ANGLE, 4);
-	// 		entity.vx = safeCosMul(KIDON_DEFENSE_WARP_SPEED, entity.angleInt + ((input & abstractKeyLeftMask) ? angleAdder : -angleAdder));
-	// 		entity.vy = safeSinMul(KIDON_DEFENSE_WARP_SPEED, entity.angleInt + ((input & abstractKeyLeftMask) ? angleAdder : -angleAdder));
-	// 		entity.warp -= KIDON_DEFENSE_WARP_COST;
-	// 		setEntityState(entity, EntityState.Warp, KIDON_DEFENSE_WARP_FRAMES);
-	// 		return;
-	// 	}
-	// }
-
-	// if (!stun && state !== EntityState.Warp && entity.warp === shipInfo.maxWarp) {
-	// 	if ((input & abstractKeyUpMask) &&
-	// 		(input & abstractKeyWarpMask) &&
-	// 		(!(lastInput & abstractKeyUpMask) ||
-	// 		 !(lastInput & abstractKeyWarpMask))) {
-	// 		entity.angleInt = safeAtan2(enemy.y - entity.y, enemy.x - entity.x);
-	// 		entity.preWarpVx = safeCosMul(shipInfo.maxSpeed, entity.angleInt);
-	// 		entity.preWarpVy = safeSinMul(shipInfo.maxSpeed, entity.angleInt);
-	// 		entity.vx = safeCosMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
-	// 		entity.vy = safeSinMul(KIDON_OFFENSE_WARP_SPEED, entity.angleInt);
-	// 		entity.warp -= KIDON_OFFENSE_WARP_COST;
-	// 		setEntityState(entity, EntityState.Warp, KIDON_OFFENSE_WARP_FRAMES);
-	// 		return;
-	// 	}
-	// }
-	
+		
 	if (!stun) {
-		tryStartupAnyMove(entity_i, entities, usingMove, input, inputHistory, inputHistoryNextIndex);
+		tryStartupAnyMove(entity_i, entities, input, inputHistory, inputHistoryNextIndex);
 		state = getEntityState(entity);
 	}
 
@@ -514,22 +461,7 @@ function handleShipState(entity_i: number, gameState: GameState) {
 			}
 			break;
 		case EntityState.Warp:
-			if (entity.framesToStateChange % WARP_AFTER_IMAGE_SPAWN_FRAMES === 0) {
-				const renderable = {
-					type: RenderableType.KidonWarpAfterImage, // TODO: Fix this at some point or all warps will look like kidons
-					x: entity.x,
-					y: entity.y,
-					angleInt: entity.angleInt,
-					vx: 0,
-					vy: 0,
-					ax: 0,
-					ay: 0,
-					remainingFrames: WARP_AFTER_IMAGE_TTL_FRAMES,
-					totalFrames: WARP_AFTER_IMAGE_TTL_FRAMES,
-					sizePct: 100
-				};
-				renderables.push(renderable);
-			}
+			renderEntityWarp(entity, renderables);
 			if (--entity.framesToStateChange <= 0) {
 				disableShipWarp(entity);
 			}
@@ -653,7 +585,7 @@ function handleEntityState(entity_i: number, gameState: GameState) {
 				entity.shouldBeRemoved = true;
 			break;
 		case EntityType.AyinHelperB1:
-			handleAyinHelperB1State(entity_i, entities);
+			handleAyinHelperB1State(entity_i, entities, renderables);
 			break;
 		case EntityType.AyinHelperB2:
 			handleAyinHelperB2State(entity_i, entities);
@@ -668,11 +600,6 @@ function handleRenderableState(renderable: Renderable) {
 	renderable.y += renderable.vy;
 	--renderable.remainingFrames;
 }
-
-type MovementHandler = { (entity: Entity, player1: Entity, player2: Entity): void };
-const MOVEMENT_HANDLER_MAP = new Map<EntityType, MovementHandler>(
-
-);
 
 function handleEntityMovement(entity: Entity, player1: Entity, player2: Entity) {
 	entity.x += entity.vx;

@@ -157,7 +157,7 @@ export const AYIN_HEIGHT = 4000;
 assert(AYIN_HEIGHT === AYIN_WIDTH, "Ayin is a circle, so width and height must be the same");
 export const AYIN_RENDER_TRIANGLES = makeCircleTriangles(safeDiv(AYIN_WIDTH, 2), 20);
 export const AYIN_PUPIL_TRIANGLES = (() => {
-	const ret = makeCircleTriangles(safeDiv(AYIN_WIDTH, 2 * 3.54), 10); // it's ok to use 3.54 since this render-only
+	const ret = makeCircleTriangles(safeDiv(AYIN_WIDTH * 100, 2 * 354), 10);
 	for (let i = 0, l = ret.data.length; i < l; i += 2)
 		ret.data[i] += safeDiv(AYIN_WIDTH * 3, 2 * 5);
 	return ret;
@@ -210,6 +210,12 @@ export const AYIN_HELPER_B1_ATTACK_SHOT_SHAPE = {
 																		  safeAtan2(AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF[5], AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF[4]),
 																		  safeAtan2(AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF[3], AYIN_HELPER_B1_ATTACK_SHOT_LEFT_HALF[2]) + MAX_INT_ANGLE).data)
 };
+export const AYIN_HELPER_B1_PUPIL_TRIANGLES = (() => {
+	const ret = makeCircleTriangles(safeDiv(AYIN_HELPER_B1_WIDTH * 100, 2 * 236), 1000);
+	for (let i = 0, l = ret.data.length; i < l; i += 2)
+		ret.data[i] += safeDiv(AYIN_HELPER_B1_WIDTH * 6, 2 * 15);
+	return ret;
+})();
 
 export const AYIN_SHOT_A2_TRIANGLES = {
 	type: ShapeInfoType.Triangles,
@@ -228,3 +234,4 @@ export const AYIN_HELPER_B2_SHAPE = AYIN_HELPER_B1_SHAPE;
 export const AYIN_HELPER_B2_WIDTH = AYIN_HELPER_B1_WIDTH;
 export const AYIN_HELPER_B2_RENDER_TRIANGLES = AYIN_HELPER_B1_RENDER_TRIANGLES;
 export const AYIN_HELPER_B2_ATTACK_SHOT_SHAPE = AYIN_HELPER_B1_ATTACK_SHOT_SHAPE;
+export const AYIN_HELPER_B2_PUPIL_TRIANGLES = AYIN_HELPER_B1_PUPIL_TRIANGLES;

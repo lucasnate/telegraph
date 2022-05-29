@@ -14,7 +14,7 @@ export interface ShipInfo {
 
 	stablizeAccel: number,
 	noStablizeFrames: number,
-	
+
 	moveInfo: Map<Move, MoveInfo>
 }
 
